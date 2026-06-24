@@ -357,3 +357,173 @@ export function buildNeighborhood(scene) {
   scene.add(group);
   return group;
 }
+
+// =============================================================================
+// Endless houses: a HUGE grid of simple houses stretching out in every direction
+// to the fog line, so the neighborhood looks like it goes on forever (paired with
+// scene.fog in main.js, which fades the far edge into the sky — you never see
+// where it stops). The whole grid is just TWO draw calls thanks to InstancedMesh:
+// one instanced box for all the bodies, one instanced pyramid for all the roofs,
+// each with a per-instance colour. Far too distant for doors/windows to matter.
+// =============================================================================
+export function buildEndlessHouses(scene) {
+  const WALLS = [0xffd9a0, 0xffb3c1, 0xb5e2ff, 0xc8f0c0, 0xe7d4ff, 0xfff0a8, 0xffc6d9, 0xbfe0c8, 0xd7c4a8, 0xa8c8d8];
+  const ROOFS = [0x9c4f3f, 0x6a8caf, 0x7a9e58, 0xb0617f, 0x5f7d8c, 0xc97b4a, 0x8a6dab, 0x4f6b58];
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+  // Lay out lots on a grid; every 5th lane is a "street" (skipped) so the houses
+  // clump into blocks, and ~12% of lots are left vacant for natural variation. A
+  // protected central rectangle is skipped — that's where the play house and the
+  // detailed near-neighborhood live.
+  const STEP = 15, HALF = 240;
+  const protectedLot = (x, z) => x > -34 && x < 96 && z > -42 && z < 52;
+  const lots = [];
+  let ci = 0;
+  for (let gx = -HALF; gx <= HALF; gx += STEP, ci++) {
+    let cj = 0;
+    for (let gz = -HALF; gz <= HALF; gz += STEP, cj++) {
+      if (ci % 5 === 0 || cj % 5 === 0) continue; // street lanes
+      if (protectedLot(gx, gz)) continue;
+      if (Math.random() < 0.12) continue; // vacant lot
+      lots.push({
+        x: gx + (Math.random() - 0.5) * 4,
+        z: gz + (Math.random() - 0.5) * 4,
+        rot: Math.floor(Math.random() * 4) * (Math.PI / 2),
+        s: 0.9 + Math.random() * 0.7,
+        wc: pick(WALLS),
+        rc: pick(ROOFS),
+      });
+    }
+  }
+  const n = lots.length;
+
+  // Unit house: a 6x4x5 body (base on y=0) + a 4-sided pyramid roof on top.
+  const bodyGeo = new THREE.BoxGeometry(6, 4, 5); bodyGeo.translate(0, 2, 0);
+  const roofGeo = new THREE.ConeGeometry(5.0, 2.6, 4); roofGeo.rotateY(Math.PI / 4); roofGeo.translate(0, 4 + 1.3, 0);
+  const bodyIM = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ roughness: 1 }), n);
+  const roofIM = new THREE.InstancedMesh(roofGeo, new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }), n);
+
+  const dummy = new THREE.Object3D();
+  const col = new THREE.Color();
+  lots.forEach((lot, i) => {
+    dummy.position.set(lot.x, 0, lot.z);
+    dummy.rotation.set(0, lot.rot, 0);
+    dummy.scale.set(lot.s, lot.s, lot.s);
+    dummy.updateMatrix();
+    bodyIM.setMatrixAt(i, dummy.matrix);
+    roofIM.setMatrixAt(i, dummy.matrix);
+    bodyIM.setColorAt(i, col.set(lot.wc));
+    roofIM.setColorAt(i, col.set(lot.rc));
+  });
+  for (const im of [bodyIM, roofIM]) {
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    im.castShadow = false;
+    im.receiveShadow = false;
+    im.userData.excludeFromCapture = true; // never in the judged birdseye
+    im.frustumCulled = false; // it spans the whole world; its bounds are always in view
+    im.matrixAutoUpdate = false;
+    scene.add(im);
+  }
+  return { bodyIM, roofIM, count: n };
+}
+
+// =============================================================================
+// Front garden: the yard between the open house front (+Z) and the street — a
+// white picket fence with a gate, a path out to the sidewalk, flower beds along
+// the fence, bushes and a couple of small trees. Cosmetic + excludeFromCapture.
+// =============================================================================
+export function buildFrontGarden(scene) {
+  const group = new THREE.Group();
+  const greenA = new THREE.MeshStandardMaterial({ color: 0x4f8f43, roughness: 1 });
+  const greenB = new THREE.MeshStandardMaterial({ color: 0x5fa64f, roughness: 1 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6d4c33, roughness: 1 });
+  const soilMat = new THREE.MeshStandardMaterial({ color: 0x6b4a32, roughness: 1 });
+  const pathMat = new THREE.MeshStandardMaterial({ color: 0xcfc6b3, roughness: 1 });
+  const picketMat = new THREE.MeshStandardMaterial({ color: 0xfaf6ee, roughness: 0.9 });
+  const flowerMats = [0xff5fa2, 0xffd54f, 0xff7043, 0xab47bc, 0xffffff, 0xef5350].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 }));
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+  // The active room is viewed from ~z=8 (the open front), so the fence sits a bit
+  // further out (z≈9.5): it never blocks the room interior at the default/zoomed-in
+  // view, and reads as a proper front lawn when you orbit or zoom out.
+  const X0 = -6, X1 = 48, FENCE_Z = 9.5, GATE_X = 20, GATE_W = 3;
+
+  const slab = (w, d, x, z, mat, y = 0.03) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); group.add(m);
+  };
+
+  // --- Picket fence: instanced pickets (1 draw call) + a couple of rail boxes ---
+  const picketPts = [];
+  for (let x = X0; x <= X1; x += 0.55) {
+    if (Math.abs(x - GATE_X) < GATE_W / 2) continue; // leave a gate gap
+    picketPts.push(x);
+  }
+  const picketGeo = new THREE.BoxGeometry(0.12, 1.0, 0.08); picketGeo.translate(0, 0.5, 0);
+  const pickets = new THREE.InstancedMesh(picketGeo, picketMat, picketPts.length);
+  const d = new THREE.Object3D();
+  picketPts.forEach((x, i) => { d.position.set(x, 0, FENCE_Z); d.updateMatrix(); pickets.setMatrixAt(i, d.matrix); });
+  pickets.instanceMatrix.needsUpdate = true;
+  group.add(pickets);
+  // two horizontal rails, split around the gate
+  const rail = (xa, xb, y) => {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(xb - xa, 0.09, 0.06), picketMat);
+    r.position.set((xa + xb) / 2, y, FENCE_Z); group.add(r);
+  };
+  for (const y of [0.35, 0.75]) { rail(X0, GATE_X - GATE_W / 2, y); rail(GATE_X + GATE_W / 2, X1, y); }
+
+  // --- Path from the gate out to the sidewalk ---
+  slab(GATE_W - 0.4, 8.5, GATE_X, FENCE_Z + 4.4, pathMat);
+  // --- Soil flower bed strip just inside the fence ---
+  slab(X1 - X0, 1.3, (X0 + X1) / 2, FENCE_Z - 1.1, soilMat, 0.04);
+
+  // --- Flower clusters: a green mound with little colored blooms on stems -------
+  function flowerCluster(x, z, s = 1) {
+    const c = new THREE.Group();
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.5 * s, 8, 6), greenA);
+    mound.scale.y = 0.5; mound.position.y = 0.1 * s; c.add(mound);
+    for (let k = 0; k < 5; k++) {
+      const fx = (Math.random() - 0.5) * 0.7 * s, fz = (Math.random() - 0.5) * 0.7 * s;
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02 * s, 0.02 * s, 0.4 * s, 4), greenB);
+      stem.position.set(fx, 0.22 * s, fz); c.add(stem);
+      const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.1 * s, 6, 5), pick(flowerMats));
+      bloom.position.set(fx, 0.44 * s, fz); c.add(bloom);
+    }
+    c.position.set(x, 0, z); group.add(c);
+  }
+  // a row of flower clusters along the bed (skipping the gate)
+  for (let x = X0 + 1; x < X1; x += 3.4) {
+    if (Math.abs(x - GATE_X) < GATE_W) continue;
+    flowerCluster(x + (Math.random() - 0.5), FENCE_Z - 1.1, 0.85 + Math.random() * 0.4);
+  }
+
+  // --- Bushes flanking the gate/path + scattered ---
+  const bush = (x, z, s = 1) => {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.45 * s, 8, 6), Math.random() < 0.5 ? greenA : greenB);
+    b.position.set(x, 0.3 * s, z); b.scale.y = 0.8; group.add(b);
+  };
+  bush(GATE_X - GATE_W, FENCE_Z + 1.6, 1.1); bush(GATE_X + GATE_W, FENCE_Z + 1.6, 1.1);
+  for (const x of [-2, 10, 30, 44]) bush(x, FENCE_Z + 3.4 + Math.random(), 0.9 + Math.random() * 0.5);
+
+  // --- A couple of small trees at the front corners ---
+  const tree = (x, z, s = 1) => {
+    const t = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.16 * s, 1.2 * s, 7), trunkMat);
+    trunk.position.y = 0.6 * s; t.add(trunk);
+    const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.8 * s, 10, 8), greenA); f1.position.y = 1.5 * s; t.add(f1);
+    const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.55 * s, 10, 8), greenB); f2.position.set(0.35 * s, 1.85 * s, 0.2 * s); t.add(f2);
+    t.position.set(x, 0, z); group.add(t);
+  };
+  tree(-4, FENCE_Z + 3.5, 1.0); tree(46, FENCE_Z + 3.5, 1.0);
+
+  group.traverse((o) => {
+    o.castShadow = false;
+    o.receiveShadow = false;
+    o.userData.excludeFromCapture = true;
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
+  scene.add(group);
+  return group;
+}

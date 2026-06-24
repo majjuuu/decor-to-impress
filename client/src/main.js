@@ -17,7 +17,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { buildHouse, buildRoof, buildGarden, buildNeighborhood } from "./room.js";
+import { buildHouse, buildRoof, buildGarden, buildNeighborhood, buildEndlessHouses, buildFrontGarden } from "./room.js";
 import { ROOM_SIZE, grid } from "./grid.js";
 import { generateHouse } from "./rooms.js";
 import { buildCatalogUI } from "./ui.js";
@@ -47,6 +47,13 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const SKY = 0xbfe6ff; // pale horizon blue (fallback + hemisphere tint)
 scene.background = new THREE.Color(SKY);
+
+// ---- Fog --------------------------------------------------------------------
+// Linear fog fades distant geometry into the pale horizon colour. This is what
+// sells the "endless" world: the far edge of the (huge) house grid and ground
+// dissolves into the sky, so you never see where the world stops. `near` is well
+// past the play area so the active room and its surroundings stay perfectly crisp.
+scene.fog = new THREE.Fog(0xdcefff, 75, 235);
 
 // ---- Sky dome ---------------------------------------------------------------
 // A big inside-out sphere with a vertical gradient (deep blue zenith -> pale
@@ -86,11 +93,13 @@ function makeGrassTexture() {
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(90, 90);
+  tex.repeat.set(200, 200);
   return tex;
 }
+// A grass plane big enough that, with fog, it fades into the horizon long before
+// its real edge — so the world reads as endless ground in every direction.
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(400, 400),
+  new THREE.PlaneGeometry(900, 900),
   new THREE.MeshStandardMaterial({ map: makeGrassTexture(), roughness: 1 })
 );
 ground.rotation.x = -Math.PI / 2;
@@ -153,7 +162,9 @@ let houseNumber = 1;
 const shells = buildHouse(scene, currentRooms.length);
 buildRoof(scene, currentRooms.length); // pitched roof over the top floor
 buildGarden(scene); // trees + bushes around the house
-buildNeighborhood(scene); // background houses + street so it reads as a neighborhood
+buildFrontGarden(scene); // fenced front yard with a path, flowers and trees
+buildNeighborhood(scene); // detailed near-houses + street so it reads as a neighborhood
+buildEndlessHouses(scene); // huge instanced house grid fading into fog → endless world
 
 // ---- OrbitControls ----------------------------------------------------------
 // OrbitControls lets the user rotate (left-drag), zoom (wheel), and pan
