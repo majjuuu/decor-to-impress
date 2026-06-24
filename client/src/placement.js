@@ -190,6 +190,28 @@ function makeShelf(color = 0xa1887f) {
     br.castShadow = true;
     holder.add(br);
   }
+
+  // Small objects sitting ON the shelf (books + a little potted plant). These
+  // keep their own colours regardless of the shelf's wood tint.
+  const owned = holder.userData.ownedMaterials;
+  const topY = T / 2; // plank top surface
+  const zMid = D / 2; // middle of the plank depth
+  const mkMat = (c, o = {}) => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, ...o }); owned.push(m); return m; };
+  // a little row of standing books on the left
+  const bookCols = [0xe05a5a, 0x5e9cff, 0x6fcf73, 0xf2c14e];
+  bookCols.forEach((c, i) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.1), mkMat(c));
+    b.position.set(-W / 2 + 0.14 + i * 0.05, topY + 0.07, zMid);
+    b.rotation.z = (i === 3 ? -0.25 : 0); // last one leans
+    b.castShadow = true;
+    holder.add(b);
+  });
+  // a small potted plant on the right
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.08, 10), mkMat(0xc1734a));
+  pot.position.set(W / 2 - 0.16, topY + 0.04, zMid); pot.castShadow = true; holder.add(pot);
+  const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mkMat(0x4f8f43));
+  leaves.position.set(W / 2 - 0.16, topY + 0.14, zMid); leaves.castShadow = true; holder.add(leaves);
+
   return holder;
 }
 
@@ -229,18 +251,26 @@ function makeFlowers(color = 0xff5fa2) {
   return h;
 }
 
-// A framed picture for the wall (canvas colour tintable). Built centred on y=0 so
+// A framed picture for the wall — an actual little landscape (sky + sun + hill),
+// not a blank panel. The SKY colour is tintable. Built centred on y=0 so
 // placeWall's mountY puts its middle at eye level. Faces +z (into the room).
-function makeWallArt(color = 0x7ec8e3) {
+function makeWallArt(color = 0x9ed8f0) {
   const h = new THREE.Group();
   const owned = [];
   h.userData.ownedMaterials = owned;
-  const frameMat = mat(0x6d4c33); owned.push(frameMat);
-  const artMat = mat(color, { roughness: 0.6 }); owned.push(artMat);
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.52, 0.05), frameMat);
-  frame.position.z = 0.025; frame.castShadow = true; h.add(frame);
-  const canvas = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.06), artMat);
-  canvas.position.z = 0.04; h.add(canvas);
+  const add = (geo, m, x, y, z) => {
+    owned.push(m);
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    h.add(mesh);
+    return mesh;
+  };
+  // frame (back), then the picture layered in front of it
+  add(new THREE.BoxGeometry(0.72, 0.52, 0.05), mat(0x6d4c33), 0, 0, 0).castShadow = true;
+  add(new THREE.BoxGeometry(0.62, 0.42, 0.04), mat(color, { roughness: 0.6 }), 0, 0, 0.04); // sky
+  add(new THREE.BoxGeometry(0.62, 0.16, 0.03), mat(0x5fa64f), 0, -0.13, 0.055); // green ground
+  add(new THREE.CircleGeometry(0.06, 18), mat(0xffd23f, { roughness: 0.5 }), 0.17, 0.1, 0.075); // sun
+  add(new THREE.CircleGeometry(0.05, 18), mat(0xffffff, { roughness: 1 }), -0.14, 0.12, 0.075); // cloud
   return h;
 }
 
