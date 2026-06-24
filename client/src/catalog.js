@@ -59,6 +59,7 @@ export const CATALOG = [
     scale: 2.3,
     baseRotation: 0,
     details: ["cup", "book"], // a mug + a book on the desk
+    surface: true, // small objects can be placed on top
   },
   {
     id: "dresser",
@@ -69,6 +70,7 @@ export const CATALOG = [
     modelPath: "/models/cabinetBedDrawer.glb",
     scale: 3.38,
     baseRotation: 0,
+    surface: true, // small objects can be placed on top
   },
   {
     id: "bed",
@@ -91,6 +93,7 @@ export const CATALOG = [
     modelPath: "/models/sofa.glb",
     scale: 2.0,
     baseRotation: 0,
+    surface: true, // small objects can be placed on top
   },
   {
     id: "coffeeTable",
@@ -102,6 +105,7 @@ export const CATALOG = [
     scale: 1.5,
     baseRotation: 0,
     details: ["cup", "book"], // a coffee cup + a book on top
+    surface: true, // small objects can be placed on top
   },
   {
     id: "bookshelf",
@@ -112,6 +116,7 @@ export const CATALOG = [
     modelPath: "/models/bookshelf.glb",
     scale: 2.0,
     baseRotation: 0,
+    surface: true, // small objects can be placed on top
   },
   {
     id: "tvStand",
@@ -123,6 +128,7 @@ export const CATALOG = [
     scale: 2.2,
     baseRotation: 0,
     details: ["tv"], // a TV (screen on a stand) sits on top
+    surface: true, // small objects can be placed on top
   },
   {
     id: "divider",
@@ -145,6 +151,7 @@ export const CATALOG = [
     modelPath: "/models/books.glb",
     scale: 2.6,
     baseRotation: 0,
+    onSurface: true, // can be placed on a shelf/table surface (not just the floor)
   },
   {
     id: "smallPlant",
@@ -155,6 +162,7 @@ export const CATALOG = [
     modelPath: "/models/smallPlant.glb",
     scale: 4.5,
     baseRotation: 0,
+    onSurface: true, // can be placed on a shelf/table surface (not just the floor)
   },
   {
     id: "cushion",
@@ -163,6 +171,7 @@ export const CATALOG = [
     height: 0.3,
     color: 0xff9eb5,
     procedural: "cushion", // no model — built in code
+    onSurface: true, // can be placed on a shelf/table surface (not just the floor)
   },
   {
     id: "flowers",
@@ -171,6 +180,7 @@ export const CATALOG = [
     height: 0.6,
     color: 0xff5fa2,
     procedural: "flowers",
+    onSurface: true, // can be placed on a shelf/table surface (not just the floor)
   },
   {
     id: "rug",
@@ -239,6 +249,7 @@ export const CATALOG = [
     footprint: { rows: 1, cols: 1 },
     color: 0xa1887f,
     mountY: 1.45, // mounted high on the wall
+    surface: true, // small objects can be placed on the plank
   },
   {
     id: "wallArt",

@@ -190,28 +190,6 @@ function makeShelf(color = 0xa1887f) {
     br.castShadow = true;
     holder.add(br);
   }
-
-  // Small objects sitting ON the shelf (books + a little potted plant). These
-  // keep their own colours regardless of the shelf's wood tint.
-  const owned = holder.userData.ownedMaterials;
-  const topY = T / 2; // plank top surface
-  const zMid = D / 2; // middle of the plank depth
-  const mkMat = (c, o = {}) => { const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, ...o }); owned.push(m); return m; };
-  // a little row of standing books on the left
-  const bookCols = [0xe05a5a, 0x5e9cff, 0x6fcf73, 0xf2c14e];
-  bookCols.forEach((c, i) => {
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.1), mkMat(c));
-    b.position.set(-W / 2 + 0.14 + i * 0.05, topY + 0.07, zMid);
-    b.rotation.z = (i === 3 ? -0.25 : 0); // last one leans
-    b.castShadow = true;
-    holder.add(b);
-  });
-  // a small potted plant on the right
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.08, 10), mkMat(0xc1734a));
-  pot.position.set(W / 2 - 0.16, topY + 0.04, zMid); pot.castShadow = true; holder.add(pot);
-  const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mkMat(0x4f8f43));
-  leaves.position.set(W / 2 - 0.16, topY + 0.14, zMid); leaves.castShadow = true; holder.add(leaves);
-
   return holder;
 }
 
@@ -472,8 +450,10 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
   let ghost = null; // translucent preview mesh (rebuilt when activeItem changes)
   let hoverTile = null; // { row, col } origin under the mouse, or null if off-grid
   let hoverWall = null; // { wallId, index } under the mouse (for wall items)
+  let hoverSurface = null; // { x, y, z } on a shelf/table surface (for small objects)
   let instanceCounter = 0;
   const isWallItem = () => activeItem && activeItem.mount === "wall";
+  const isSurfaceItem = () => activeItem && activeItem.onSurface; // small decor
   // Input is gated by the game state machine: placement/rotate/delete only work
   // while playing (DESIGN). We gate the actual handlers here — not just by hiding
   // the catalog — so a stray click during START/REVEAL/RESULT does nothing.
@@ -527,6 +507,24 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     const along = wallId === "back" || wallId === "front" ? p.x - roomOff.x : p.z - roomOff.z;
     const index = Math.floor(along + HALF); // 0 .. GRID_SIZE-1
     return index >= 0 && index < GRID_SIZE ? { wallId, index } : null;
+  }
+
+  // Cast the ray at placed SURFACE items (shelves, tables…) and return the spot
+  // on top to drop a small object: { x, y, z } (y = that item's top). Lets you
+  // put books/plants/etc. ON a bookshelf or wall shelf, like things sit on a rug.
+  function surfaceUnderPointer(event) {
+    const surfaces = placedItems.filter((p) => p.item.surface);
+    if (surfaces.length === 0) return null;
+    aimRayAt(event);
+    const hits = raycaster.intersectObjects(surfaces.map((p) => p.mesh), true);
+    if (hits.length === 0) return null;
+    const entry = hits[0].object.userData.placed;
+    if (!entry) return null;
+    const box = new THREE.Box3().setFromObject(entry.mesh);
+    // place at the cursor's x/z (clamped onto the item) on the item's TOP surface
+    const x = Math.max(box.min.x, Math.min(box.max.x, hits[0].point.x));
+    const z = Math.max(box.min.z, Math.min(box.max.z, hits[0].point.z));
+    return { x, y: box.max.y, z };
   }
 
   // (a): cast the ray at the PLACED MESHES and return the owning registry entry.
@@ -592,6 +590,14 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
       ghost.visible = true;
       return;
     }
+    // Small object hovering a shelf/table surface: snap the ghost onto it (green).
+    if (isSurfaceItem() && hoverSurface) {
+      ghost.position.set(hoverSurface.x, hoverSurface.y + activeItem.height / 2, hoverSurface.z);
+      ghost.rotation.y = 0;
+      ghost.material = ghostMatValid;
+      ghost.visible = true;
+      return;
+    }
     if (!hoverTile) { ghost.visible = false; return; }
     const { row, col } = hoverTile;
     const center = footprintCenterWorld(activeItem, row, col, activeOrientation);
@@ -611,7 +617,10 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     if (!inputEnabled) return; // gated to the DESIGN state
     if (!activeItem) return; // no active item -> no ghost, and clicks mean delete
     if (isWallItem()) hoverWall = wallUnderPointer(event);
-    else hoverTile = tileUnderPointer(event);
+    else if (isSurfaceItem()) {
+      hoverSurface = surfaceUnderPointer(event); // prefer a shelf/table surface…
+      hoverTile = hoverSurface ? null : tileUnderPointer(event); // …else the floor
+    } else hoverTile = tileUnderPointer(event);
     updateGhost();
   }
 
@@ -638,6 +647,19 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
       if (seg) {
         const placed = placeWall(activeItem, seg.wallId, seg.index);
         if (!placed) play("invalid"); // that wall segment is taken
+      }
+    } else if (isSurfaceItem()) {
+      // Small object: first try to drop it onto a shelf/table surface…
+      const surf = surfaceUnderPointer(event);
+      if (surf) {
+        placeOnSurface(activeItem, surf);
+        return;
+      }
+      // …otherwise fall back to placing it on the floor like any other item.
+      const tile = tileUnderPointer(event);
+      if (tile) {
+        const placed = place(activeItem, tile.row, tile.col, activeOrientation);
+        if (!placed) play("invalid");
       }
     } else if (activeItem) {
       const tile = tileUnderPointer(event);
@@ -725,6 +747,29 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     return entry;
   }
 
+  // Place a small object ON TOP of an already-placed surface (shelf/table). The
+  // surface coords from surfaceUnderPointer are already world-space (the raycast
+  // hit a real mesh), so — unlike place()/placeWall() — we do NOT add roomOff.
+  // No grid occupancy: surface objects float on furniture, like rugs on the floor.
+  function placeOnSurface(item, surf) {
+    const instanceId = ++instanceCounter;
+    const mesh = makeItemHolder(item, models, activeColorMap);
+    mesh.position.set(surf.x, surf.y + item.height / 2, surf.z);
+
+    const entry = { instanceId, item, mesh, surface: true, tiles: [] };
+    mesh.traverse((obj) => {
+      obj.userData.instanceId = instanceId;
+      obj.userData.placed = entry;
+    });
+    scene.add(mesh);
+    placedItems.push(entry);
+
+    play("place");
+    popIn(mesh);
+    updateGhost();
+    return entry;
+  }
+
   // Placement pop: scale the holder 0.9 -> 1 over ~120ms. Self-terminates if the
   // piece is removed mid-animation (parent becomes null), so it needs no external
   // cleanup. Driven by the existing render loop via requestAnimationFrame.
@@ -784,6 +829,7 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     activeOrientation = 0;
     hoverTile = null;
     hoverWall = null;
+    hoverSurface = null;
     disposeGhost();
   }
 
@@ -868,6 +914,8 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     rotateActiveItem,
     place, // exposed for programmatic placement / tests
     placeWall, // exposed for tests
+    placeOnSurface, // drop a small object onto a shelf/table surface
+    surfaceUnderPointer, // exposed for tests (which surface is under the cursor)
     removePlaced, // exposed for programmatic deletion / tests
     placedItems, // registry (also exported standalone above)
   };
