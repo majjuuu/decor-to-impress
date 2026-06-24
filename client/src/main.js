@@ -17,7 +17,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { buildHouse, buildRoof, buildGarden } from "./room.js";
+import { buildHouse, buildRoof, buildGarden, buildNeighborhood } from "./room.js";
 import { ROOM_SIZE, grid } from "./grid.js";
 import { generateHouse } from "./rooms.js";
 import { buildCatalogUI } from "./ui.js";
@@ -153,6 +153,7 @@ let houseNumber = 1;
 const shells = buildHouse(scene, currentRooms.length);
 buildRoof(scene, currentRooms.length); // pitched roof over the top floor
 buildGarden(scene); // trees + bushes around the house
+buildNeighborhood(scene); // background houses + street so it reads as a neighborhood
 
 // ---- OrbitControls ----------------------------------------------------------
 // OrbitControls lets the user rotate (left-drag), zoom (wheel), and pan
