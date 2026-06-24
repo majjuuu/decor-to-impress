@@ -58,6 +58,7 @@ export const CATALOG = [
     modelPath: "/models/desk.glb",
     scale: 2.3,
     baseRotation: 0,
+    details: ["cup", "book"], // a mug + a book on the desk
   },
   {
     id: "dresser",
@@ -100,6 +101,7 @@ export const CATALOG = [
     modelPath: "/models/coffeeTable.glb",
     scale: 1.5,
     baseRotation: 0,
+    details: ["cup", "book"], // a coffee cup + a book on top
   },
   {
     id: "bookshelf",
@@ -120,7 +122,7 @@ export const CATALOG = [
     modelPath: "/models/tvStand.glb",
     scale: 2.2,
     baseRotation: 0,
-    addTV: true, // place a screen on top so it's a TV + stand, not a bare stand
+    details: ["tv"], // a TV (screen on a stand) sits on top
   },
   {
     id: "divider",
@@ -131,6 +133,55 @@ export const CATALOG = [
     modelPath: "/models/divider.glb",
     scale: 1.7,
     baseRotation: 0,
+  },
+
+  // ---- Small decor (fill the room with detail) ------------------------------
+  {
+    id: "books",
+    name: "Books",
+    footprint: { rows: 1, cols: 1 },
+    height: 0.2,
+    color: 0xc0563f,
+    modelPath: "/models/books.glb",
+    scale: 2.6,
+    baseRotation: 0,
+  },
+  {
+    id: "smallPlant",
+    name: "Small Plant",
+    footprint: { rows: 1, cols: 1 },
+    height: 0.5,
+    color: 0x4f8f43,
+    modelPath: "/models/smallPlant.glb",
+    scale: 4.5,
+    baseRotation: 0,
+  },
+  {
+    id: "cushion",
+    name: "Cushion",
+    footprint: { rows: 1, cols: 1 },
+    height: 0.3,
+    color: 0xff9eb5,
+    procedural: "cushion", // no model — built in code
+  },
+  {
+    id: "flowers",
+    name: "Flowers",
+    footprint: { rows: 1, cols: 1 },
+    height: 0.6,
+    color: 0xff5fa2,
+    procedural: "flowers",
+  },
+  {
+    id: "rug",
+    name: "Rug",
+    footprint: { rows: 2, cols: 3 },
+    height: 0.05,
+    color: 0xb07a6b,
+    modelPath: "/models/rug.glb",
+    scale: 1.7,
+    baseRotation: 0,
+    flat: true, // lies on the floor; furniture can sit on top, ignores occupancy
   },
 
   // ---- Bathroom fixtures (floor items) --------------------------------------
@@ -188,6 +239,15 @@ export const CATALOG = [
     footprint: { rows: 1, cols: 1 },
     color: 0xa1887f,
     mountY: 1.45, // mounted high on the wall
+  },
+  {
+    id: "wallArt",
+    name: "Wall Art",
+    mount: "wall",
+    procedural: "wallArt", // framed picture (canvas colour tintable)
+    footprint: { rows: 1, cols: 1 },
+    color: 0x7ec8e3,
+    mountY: 1.5, // centred at eye level
   },
   {
     id: "door",

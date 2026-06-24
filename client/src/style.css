@@ -92,6 +92,13 @@ canvas {
   flex: 1;
 }
 
+/* The item list can get long (lots of decor) — cap it and let it scroll. */
+.catalog__list {
+  max-height: 42vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 /* ---- Colour picker (swatches + wheel) ---- */
 .catalog__colors {
   margin-top: 12px;

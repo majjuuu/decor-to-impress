@@ -107,6 +107,12 @@ export function canPlace(item, row, col, orientation = 0) {
   );
 }
 
+// Flat items (rugs) lie under furniture: they only need to be IN-BOUNDS — they
+// ignore (and don't claim) tile occupancy, so things can sit on top of them.
+export function canPlaceFlat(item, row, col, orientation = 0) {
+  return footprintTiles(item, row, col, orientation).every(({ row: r, col: c }) => isInBounds(r, c));
+}
+
 // Mark an item's covered tiles as occupied, tagging them with an instance id so
 // we know WHICH placed item owns each tile (delete uses this).
 export function occupy(item, row, col, instanceId, orientation = 0) {
@@ -187,11 +193,121 @@ function makeShelf(color = 0xa1887f) {
   return holder;
 }
 
+// --- More procedural decor (small objects that fill a room) ------------------
+const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...opts });
+
+// A soft floor cushion (a squashed sphere). Sits on the floor.
+function makeCushion(color = 0xff9eb5) {
+  const h = new THREE.Group();
+  const m = mat(color, { roughness: 0.95 });
+  h.userData.ownedMaterials = [m];
+  const c = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 10), m);
+  c.scale.set(1, 0.45, 1);
+  c.position.y = 0.19;
+  c.castShadow = true;
+  c.receiveShadow = true;
+  h.add(c);
+  return h;
+}
+
+// A vase of flowers (bloom colour is tintable).
+function makeFlowers(color = 0xff5fa2) {
+  const h = new THREE.Group();
+  const owned = [];
+  h.userData.ownedMaterials = owned;
+  const vaseMat = mat(0xdfe7ef, { roughness: 0.3 }); owned.push(vaseMat);
+  const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.09, 0.28, 12), vaseMat);
+  vase.position.y = 0.14; vase.castShadow = true; h.add(vase);
+  const stemMat = mat(0x4f8f43); owned.push(stemMat);
+  const bloomMat = mat(color, { roughness: 0.6 }); owned.push(bloomMat);
+  for (const [x, y, z] of [[0, 0.58, 0], [0.1, 0.52, 0.06], [-0.1, 0.54, -0.05], [0.06, 0.6, -0.08]]) {
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, y - 0.28, 5), stemMat);
+    stem.position.set(x, (0.28 + y) / 2, z); h.add(stem);
+    const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), bloomMat);
+    bloom.position.set(x, y, z); bloom.castShadow = true; h.add(bloom);
+  }
+  return h;
+}
+
+// A framed picture for the wall (canvas colour tintable). Built centred on y=0 so
+// placeWall's mountY puts its middle at eye level. Faces +z (into the room).
+function makeWallArt(color = 0x7ec8e3) {
+  const h = new THREE.Group();
+  const owned = [];
+  h.userData.ownedMaterials = owned;
+  const frameMat = mat(0x6d4c33); owned.push(frameMat);
+  const artMat = mat(color, { roughness: 0.6 }); owned.push(artMat);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.52, 0.05), frameMat);
+  frame.position.z = 0.025; frame.castShadow = true; h.add(frame);
+  const canvas = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.06), artMat);
+  canvas.position.z = 0.04; h.add(canvas);
+  return h;
+}
+
+// --- "Props on top" — little details placed on furniture (group bottom at y=0) -
+function propCup(owned) {
+  const g = new THREE.Group();
+  const cupMat = mat(0xffffff, { roughness: 0.4 }); owned.push(cupMat);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.08, 12), cupMat);
+  cup.position.y = 0.04; cup.castShadow = true; g.add(cup);
+  const coffeeMat = mat(0x5a3a22, { roughness: 0.5 }); owned.push(coffeeMat);
+  const coffee = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.012, 12), coffeeMat);
+  coffee.position.y = 0.08; g.add(coffee);
+  return g;
+}
+function propBook(owned) {
+  const g = new THREE.Group();
+  const colors = [0xe05a5a, 0x5e9cff, 0x6fcf73];
+  let y = 0;
+  for (let i = 0; i < 2; i++) {
+    const m = mat(colors[(i + (owned.length % 3)) % 3]); owned.push(m);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.12), m);
+    b.position.set(0, y + 0.018, 0); b.rotation.y = i * 0.3; b.castShadow = true; g.add(b);
+    y += 0.04;
+  }
+  return g;
+}
+function propTV(cabW, owned) {
+  const g = new THREE.Group();
+  const w = Math.min(1.2, cabW * 0.8), hgt = w * 0.6;
+  const dark = mat(0x161616, { roughness: 0.4 }); owned.push(dark);
+  const screenMat = mat(0x2a4a66, { roughness: 0.2, metalness: 0.1, emissive: 0x16314d, emissiveIntensity: 0.5 });
+  owned.push(screenMat);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.14), dark); base.position.y = 0.015; g.add(base);
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.05), dark); neck.position.y = 0.09; g.add(neck);
+  const bezel = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, 0.05), dark);
+  bezel.position.set(0, 0.15 + hgt / 2, -0.015); bezel.castShadow = true; g.add(bezel);
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(w - 0.08, hgt - 0.08, 0.06), screenMat);
+  screen.position.set(0, 0.15 + hgt / 2, 0.02); g.add(screen);
+  return g;
+}
+
+// Place the named props on top of a model (using its measured bounds).
+function decorateTop(holder, modelBox, details, owned) {
+  const topY = modelBox.max.y;
+  const cabW = modelBox.max.x - modelBox.min.x;
+  const slots = [0, -0.18, 0.18, -0.3, 0.3]; // spread props along X
+  details.forEach((name, i) => {
+    let prop = null;
+    if (name === "tv") prop = propTV(cabW, owned);
+    else if (name === "cup") prop = propCup(owned);
+    else if (name === "book") prop = propBook(owned);
+    if (!prop) return;
+    const x = name === "tv" ? 0 : slots[i % slots.length];
+    prop.position.set(x, topY, name === "tv" ? -0.04 : 0);
+    holder.add(prop);
+  });
+}
+
 function makeItemHolder(item, models, colorMap = null) {
-  // Procedural items (e.g. the wall shelf) build their own geometry.
-  if (item.procedural === "shelf") {
-    const firstColor = colorMap && Object.values(colorMap)[0];
-    return makeShelf(firstColor != null ? firstColor : item.color);
+  // Procedural items build their own geometry (no GLB).
+  if (item.procedural) {
+    const c = colorMap && Object.values(colorMap)[0];
+    const tint = c != null ? c : item.color;
+    if (item.procedural === "shelf") return makeShelf(tint);
+    if (item.procedural === "cushion") return makeCushion(tint);
+    if (item.procedural === "flowers") return makeFlowers(tint);
+    if (item.procedural === "wallArt") return makeWallArt(tint);
   }
 
   const holder = new THREE.Group();
@@ -240,25 +356,10 @@ function makeItemHolder(item, models, colorMap = null) {
 
   holder.add(model);
 
-  // Optional: stand a TV (a dark screen on a little neck) on top of this piece, so
-  // a "TV Stand" actually has a TV rather than being a bare cabinet.
-  if (item.addTV) {
-    const top = new THREE.Box3().setFromObject(model);
-    const cabW = top.max.x - top.min.x;
-    const screenW = cabW * 0.7;
-    const screenH = 0.55;
-    const screenMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.35, metalness: 0.1 });
-    owned.push(screenMat);
-    const neckMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 });
-    owned.push(neckMat);
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.06), neckMat);
-    neck.position.set(0, top.max.y + 0.06, -0.04);
-    neck.castShadow = true;
-    holder.add(neck);
-    const screen = new THREE.Mesh(new THREE.BoxGeometry(screenW, screenH, 0.05), screenMat);
-    screen.position.set(0, top.max.y + 0.12 + screenH / 2, -0.04); // on top, slightly back
-    screen.castShadow = true;
-    holder.add(screen);
+  // Little details on top (a TV on the stand, a coffee cup + book on a table, …)
+  // so furniture reads as "lived in" rather than bare.
+  if (item.details && item.details.length) {
+    decorateTop(holder, new THREE.Box3().setFromObject(model), item.details, owned);
   }
 
   return holder;
@@ -466,9 +567,12 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     const center = footprintCenterWorld(activeItem, row, col, activeOrientation);
     ghost.position.set(center.x + roomOff.x, roomOff.y + activeItem.height / 2, center.z + roomOff.z);
     ghost.rotation.y = orientationToRadians(activeOrientation);
-    ghost.material = canPlace(activeItem, row, col, activeOrientation)
-      ? ghostMatValid
-      : ghostMatBlocked;
+    // Flat items (rugs) lie under furniture, so they only need to be in-bounds —
+    // they don't care about occupied tiles.
+    const ok = activeItem.flat
+      ? canPlaceFlat(activeItem, row, col, activeOrientation)
+      : canPlace(activeItem, row, col, activeOrientation);
+    ghost.material = ok ? ghostMatValid : ghostMatBlocked;
     ghost.visible = true;
   }
 
@@ -529,21 +633,26 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
 
   // --- Placement / rotation / deletion ---------------------------------------
   function place(item, row, col, orientation = 0) {
-    if (!canPlace(item, row, col, orientation)) return null; // invalid -> no-op
+    const flat = !!item.flat;
+    // Flat items only need to be in-bounds; normal items need free tiles.
+    if (flat ? !canPlaceFlat(item, row, col, orientation) : !canPlace(item, row, col, orientation)) {
+      return null;
+    }
 
     const instanceId = ++instanceCounter;
-    const tiles = footprintTiles(item, row, col, orientation);
-    occupy(item, row, col, instanceId, orientation);
+    const tiles = flat ? [] : footprintTiles(item, row, col, orientation);
+    if (!flat) occupy(item, row, col, instanceId, orientation); // flat items don't claim tiles
 
     // The holder's origin sits on the floor, centred on the footprint, so we just
     // place it at the footprint centre (y=0) and spin it by the orientation —
     // identical to the old box convention, but now it contains a real model.
     const mesh = makeItemHolder(item, models, activeColorMap);
     const center = footprintCenterWorld(item, row, col, orientation);
-    mesh.position.set(center.x + roomOff.x, roomOff.y, center.z + roomOff.z);
+    // Flat items lift a hair off the floor so they don't z-fight and sit under furniture.
+    mesh.position.set(center.x + roomOff.x, roomOff.y + (flat ? 0.02 : 0), center.z + roomOff.z);
     mesh.rotation.y = orientationToRadians(orientation);
 
-    const entry = { instanceId, item, row, col, orientation, mesh, tiles };
+    const entry = { instanceId, item, row, col, orientation, mesh, tiles, flat };
     // Two-way link: registry knows its mesh; every descendant knows its record so
     // a delete-raycast hitting any child mesh resolves back to this entry.
     mesh.traverse((obj) => {

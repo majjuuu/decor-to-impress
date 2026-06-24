@@ -29,8 +29,11 @@ const ROOM_TYPES = [
 ];
 const BATHROOM = { name: "Bathroom", requiredItems: ["Toilet"], itemIds: ["toilet", "bathtub", "sink", "plant"] };
 
-// Items available in EVERY room (wall pieces + space tools), appended to each.
-const UNIVERSAL = ["window", "door", "shelf", "divider"];
+// Items available in EVERY room (wall pieces, decor + space tools), appended to each.
+const UNIVERSAL = [
+  "window", "door", "shelf", "wallArt", "divider",
+  "rug", "books", "smallPlant", "cushion", "flowers",
+];
 
 // Fisher–Yates shuffle (Math.random is fine in the browser).
 function shuffle(arr) {
