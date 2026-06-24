@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Décor to Impress</title>
+    <!-- Game fonts: a pixel font for the logo/timer, a rounded playful font for UI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <!--
+      Vite serves this file as the entry point. The only DOM we need for
+      Milestone 1 is a full-window canvas; Three.js will create that canvas
+      and we attach it to <body>. UI overlays (catalog, timer, score) come later.
+    -->
+  </head>
+  <body>
+    <!-- type="module" lets us use ES `import` syntax; Vite resolves bare
+         imports like "three" from node_modules. -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,611 @@
+/* Reset the default body margin so the WebGL canvas can fill the whole window
+   with no scrollbars. `overflow: hidden` stops the page from scrolling when
+   the user drags to orbit the camera. */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #bfe6ff; /* sky blue, matches the 3D scene background */
+}
+
+/* Three.js renders into a <canvas>. Making it a block element removes the
+   tiny inline-element gap at the bottom and lets it fill the viewport. */
+canvas {
+  display: block;
+}
+
+/* ---------------------------------------------------------------------------
+   Catalog panel — a DOM overlay floating above the canvas (top-left).
+   --------------------------------------------------------------------------- */
+.catalog {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 210px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(20, 23, 30, 0.82);
+  backdrop-filter: blur(6px);
+  color: #e8e8ec;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  user-select: none;
+}
+
+.catalog__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.catalog__hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #9aa0ad;
+  margin-bottom: 10px;
+}
+
+.catalog__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.catalog__item:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* The highlight applied to the currently selected item. */
+.catalog__item.is-active {
+  background: rgba(94, 156, 255, 0.22);
+  border-color: #5e9cff;
+}
+
+.catalog__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.catalog__label {
+  flex: 1;
+}
+
+/* ---- Colour picker (swatches + wheel) ---- */
+.catalog__colors {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.catalog__sublabel {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a90a0;
+  margin-bottom: 8px;
+}
+.catalog__colorhint {
+  margin-bottom: 8px;
+}
+/* Part chips: pick WHICH part of the piece to colour. Swatch chips show the
+   part's natural colour so you can spot the blanket, frame, etc. */
+.parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.part-chip {
+  height: 22px;
+  min-width: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8e8ec;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.part-chip--swatch {
+  padding: 0;
+  width: 22px;
+}
+.part-chip:hover {
+  transform: scale(1.06);
+}
+.part-chip.is-active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #5e9cff;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.swatch:hover {
+  transform: scale(1.08);
+}
+.swatch.is-active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #5e9cff;
+}
+.swatch--original {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8e8ec;
+  font-size: 13px;
+  line-height: 1;
+}
+/* The colour wheel: a rainbow-tinted swatch hiding the native colour input. */
+.swatch--wheel {
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+}
+.swatch--wheel input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared button styling
+   --------------------------------------------------------------------------- */
+.btn {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8e8ec;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.06s;
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn--primary {
+  background: #5e9cff;
+  border-color: #5e9cff;
+  color: #0b0d12;
+}
+.btn--primary:hover {
+  background: #79afff;
+}
+
+/* ---------------------------------------------------------------------------
+   Full-screen overlays: START / REVEAL / RESULT
+   --------------------------------------------------------------------------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: none; /* toggled to flex by screens.js */
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 14, 0.62);
+  z-index: 20;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.overlay__card {
+  width: min(440px, 90vw);
+  padding: 32px;
+  border-radius: 18px;
+  background: rgba(22, 25, 33, 0.96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: #e8e8ec;
+  text-align: center;
+}
+
+.overlay__eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a90a0;
+  margin-bottom: 6px;
+}
+
+/* Game wordmark (shown on the start screen) */
+.brand {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #5e9cff, #9b6bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 2px;
+}
+.brand__tag {
+  font-size: 11px;
+  font-style: italic;
+  color: #8a90a0;
+  margin-bottom: 16px;
+}
+.overlay__title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.overlay__sub {
+  font-size: 14px;
+  color: #aab0bd;
+  margin-bottom: 14px;
+}
+.overlay__hint {
+  font-size: 13px;
+  color: #9aa0ad;
+  line-height: 1.5;
+  margin-bottom: 22px;
+}
+.overlay__cta {
+  margin-top: 6px;
+}
+.overlay__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.overlay__room {
+  font-size: 32px;
+  margin-bottom: 4px;
+}
+.overlay__needs {
+  font-size: 13px;
+  color: #aab0bd;
+  margin-bottom: 16px;
+}
+.overlay__needs strong {
+  color: #e8e8ec;
+}
+
+.theme-chip {
+  display: inline-block;
+  font-size: 22px;
+  font-weight: 700;
+  padding: 8px 22px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5e9cff, #9b6bff);
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+/* Spinner for the REVEAL screen */
+.spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 18px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #5e9cff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The captured top-down birdseye, shown on REVEAL + RESULT */
+.birdseye {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  margin: 0 auto 16px;
+  border-radius: 12px;
+  background: #0b0d12;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* RESULT pass/fail verdict badge */
+.verdict {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+.verdict--pass {
+  background: rgba(121, 224, 168, 0.18);
+  color: #79e0a8;
+}
+.verdict--fail {
+  background: rgba(255, 107, 107, 0.16);
+  color: #ff6b6b;
+}
+
+/* WIN screen trophy */
+.trophy {
+  font-size: 56px;
+  margin-bottom: 8px;
+}
+
+/* ERROR screen badge */
+.error-badge {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: rgba(255, 107, 107, 0.18);
+  color: #ff6b6b;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 44px;
+  text-align: center;
+}
+
+/* RESULT score breakdown */
+.scores {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 6px 0 18px;
+  text-align: left;
+}
+.score-row {
+  display: grid;
+  grid-template-columns: 1fr 120px auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.score-row__label {
+  color: #cfd3dc;
+}
+.score-row__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.score-row__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5e9cff, #79e0a8);
+  transition: width 0.45s ease; /* count-up animates the width from 0 */
+}
+
+/* Reveal-animation fade: elements start hidden and fade in when .is-shown added */
+.anim-fade {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.anim-fade.is-shown {
+  opacity: 1;
+}
+.score-row__num {
+  color: #aab0bd;
+  font-variant-numeric: tabular-nums;
+}
+.total {
+  font-size: 18px;
+  margin-top: 4px;
+}
+.total strong {
+  font-size: 22px;
+  color: #79e0a8;
+}
+.critique {
+  font-size: 13px;
+  font-style: italic;
+  color: #aab0bd;
+  margin-top: 10px;
+}
+
+/* ---------------------------------------------------------------------------
+   DESIGN HUD — slim top bar with theme + timer + Done
+   --------------------------------------------------------------------------- */
+.hud {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none; /* toggled to flex by screens.js */
+  align-items: center;
+  gap: 18px;
+  padding: 8px 10px 8px 18px;
+  border-radius: 12px;
+  background: rgba(20, 23, 30, 0.85);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color: #e8e8ec;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  z-index: 15;
+  user-select: none;
+}
+.hud__theme {
+  font-size: 14px;
+}
+.hud__label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a90a0;
+}
+.hud__theme-name {
+  font-weight: 700;
+}
+.hud__timer {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+  text-align: center;
+}
+.hud__timer--warning {
+  color: #ff6b6b;
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ===========================================================================
+   BRIGHT "CANDY GAME" THEME (overrides the dark defaults above)
+   Pixel font for the logo/timer, a rounded playful font everywhere else, and a
+   bright kid-friendly palette. Appended last so these rules win the cascade.
+   =========================================================================== */
+:root {
+  --ink: #3a2e52;          /* main text (deep grape, softer than black) */
+  --ink-soft: #6e6090;     /* secondary text */
+  --card: #fffaf2;         /* warm cream card */
+  --accent: #6a5cff;       /* purple-blue */
+  --pink: #ff6fae;
+  --blue: #3aa0ff;
+  --mint: #2fcf95;
+  --coral: #ff6b6b;
+  --font: "Fredoka", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pixel: "Press Start 2P", monospace;
+}
+
+body { font-family: var(--font); }
+
+/* --- Start/Result overlays: light, bright cards --- */
+.overlay { background: rgba(74, 58, 120, 0.30); }
+.overlay__card {
+  background: var(--card);
+  color: var(--ink);
+  border: 3px solid #ffffff;
+  border-radius: 26px;
+  box-shadow: 0 18px 50px rgba(80, 50, 130, 0.35);
+}
+.overlay__title { color: var(--ink); }
+.overlay__sub { color: var(--ink-soft); }
+.overlay__hint { color: var(--ink-soft); }
+.overlay__eyebrow { color: var(--pink); }
+.overlay__needs { color: var(--ink-soft); }
+.overlay__needs strong { color: var(--ink); }
+
+/* --- Logo wordmark: pixel font, rainbow gradient --- */
+.brand {
+  font-family: var(--pixel);
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: 0;
+  background: linear-gradient(90deg, var(--pink), #9b6bff, var(--blue));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.brand__tag { color: var(--ink-soft); }
+
+/* --- Chunky candy buttons --- */
+.btn {
+  font-family: var(--font);
+  font-weight: 600;
+  border: none;
+  border-radius: 14px;
+  background: #ece3ff;
+  color: var(--ink);
+  box-shadow: 0 4px 0 rgba(120, 100, 170, 0.4);
+  transition: transform 0.06s, box-shadow 0.06s, filter 0.12s;
+}
+.btn:hover { filter: brightness(1.04); background: #ece3ff; }
+.btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(120, 100, 170, 0.4); }
+.btn--primary {
+  background: linear-gradient(135deg, var(--blue), #8a6bff);
+  color: #fff;
+  box-shadow: 0 4px 0 #5a3fae;
+}
+.btn--primary:hover { background: linear-gradient(135deg, var(--blue), #8a6bff); }
+.btn--primary:active { box-shadow: 0 1px 0 #5a3fae; }
+
+.theme-chip { background: linear-gradient(135deg, var(--pink), #9b6bff); color: #fff; }
+
+/* --- Catalog panel: bright --- */
+.catalog {
+  background: rgba(255, 251, 244, 0.94);
+  color: var(--ink);
+  border: 2px solid #fff;
+  box-shadow: 0 10px 28px rgba(80, 50, 130, 0.25);
+  font-family: var(--font);
+}
+.catalog__title { color: var(--ink); }
+.catalog__hint, .catalog__sublabel, .catalog__colorhint { color: var(--ink-soft); }
+.catalog__item { background: #f1ebff; color: var(--ink); border: 2px solid transparent; }
+.catalog__item:hover { background: #e6dcff; }
+.catalog__item.is-active { background: #d9ccff; border-color: var(--accent); }
+
+/* --- HUD: bright, pixel timer --- */
+.hud {
+  background: rgba(255, 251, 244, 0.94);
+  color: var(--ink);
+  border: 2px solid #fff;
+  box-shadow: 0 8px 24px rgba(80, 50, 130, 0.25);
+  font-family: var(--font);
+}
+.hud__label { color: var(--ink-soft); }
+.hud__theme-name { color: var(--ink); }
+.hud__timer { font-family: var(--pixel); font-size: 15px; color: var(--accent); }
+.hud__timer--warning { color: var(--coral); }
+
+/* --- Results: bright bars + verdicts --- */
+.score-row__label { color: var(--ink); }
+.score-row__num { color: var(--ink-soft); }
+.score-row__bar { background: rgba(60, 40, 100, 0.1); }
+.score-row__fill { background: linear-gradient(90deg, var(--blue), var(--mint)); }
+.total { color: var(--ink); }
+.total strong, .total__num { color: #14a06a; }
+.critique { color: var(--ink-soft); }
+.verdict--pass { background: rgba(47, 207, 149, 0.2); color: #119062; }
+.verdict--fail { background: rgba(255, 107, 107, 0.2); color: #d8483f; }
+.error-badge { background: rgba(255, 107, 107, 0.2); color: var(--coral); }
+
+/* --- Swatches / part chips active rings --- */
+.swatch--original { background: #efe9fb; color: var(--ink); }
+.swatch.is-active { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.part-chip { background: #f1ebff; color: var(--ink); }
+.part-chip.is-active { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+
+/* --- Spinner accent --- */
+.spinner { border-color: rgba(106, 92, 255, 0.2); border-top-color: var(--accent); }
