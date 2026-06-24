@@ -172,30 +172,122 @@ export function buildNeighborhood(scene) {
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const jit = (n) => (Math.random() - 0.5) * n;
 
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0x6d4c33, roughness: 1 });
-  const winMat = new THREE.MeshStandardMaterial({ color: 0xbfe6ff, roughness: 0.3, metalness: 0.1 });
+  // Shared materials + a tiny box helper (one geometry per call, but materials are
+  // reused across all houses so we don't churn the GPU with hundreds of dupes).
+  const box = (w, hh, d, mat) => new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), mat);
+  const foundationMat = new THREE.MeshStandardMaterial({ color: 0x8d8278, roughness: 1 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xfaf6ee, roughness: 0.9 }); // white trim
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0xbfe6ff, roughness: 0.25, metalness: 0.1, emissive: 0x213040, emissiveIntensity: 0.15 });
+  const knobMat = new THREE.MeshStandardMaterial({ color: 0xd9b54a, roughness: 0.4, metalness: 0.6 });
+  const brickMat = new THREE.MeshStandardMaterial({ color: 0x9c5a47, roughness: 1 }); // chimney
+  const capMat = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.9 });
+  const stoopMat = new THREE.MeshStandardMaterial({ color: 0xb8b2a8, roughness: 1 });
+  const shutterMats = [0x6a8caf, 0x7a9e58, 0xb0617f, 0x5f7d8c, 0xc97b4a].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 1 }));
+  const doorMats = [0x6d4c33, 0x9c4f3f, 0x3f5d7a, 0x4a7a52, 0x7a3f5d].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 }));
 
-  // One little house: coloured body + 4-sided "pyramid" (hip) roof + a door and
-  // two windows on the front (+Z face before rotation). `s` scales the whole thing.
+  // A real gable roof: two sloped planes meeting at a ridge, with eaves that
+  // overhang the walls (the overhang + the sloped faces are what make it read as
+  // 3D rather than a flat lid). The two triangular gable ENDS are the wall colour,
+  // so the wall appears to continue up into the peak. Origin sits at the eave line.
+  function gableRoof(W, D, ov, rise, slopeMat, gableMat) {
+    const g = new THREE.Group();
+    const xH = W / 2 + ov, zH = D / 2 + ov;
+    const v = (x, y, z) => [x, y, z];
+    const tri = (a, b, c) => [...a, ...b, ...c];
+    const quad = (a, b, c, d) => [...tri(a, b, c), ...tri(a, c, d)];
+    const A0 = v(-xH, 0, -zH), B0 = v(-xH, rise, 0), C0 = v(-xH, 0, zH);
+    const A1 = v(xH, 0, -zH), B1 = v(xH, rise, 0), C1 = v(xH, 0, zH);
+    const slopes = new THREE.BufferGeometry();
+    slopes.setAttribute("position", new THREE.BufferAttribute(new Float32Array([
+      ...quad(A0, A1, B1, B0), // -z slope
+      ...quad(B0, B1, C1, C0), // +z slope
+    ]), 3));
+    slopes.computeVertexNormals();
+    g.add(new THREE.Mesh(slopes, slopeMat));
+    // gable-end triangles at the wall plane (no overhang), filling wall up to ridge
+    const wxH = W / 2, wzH = D / 2;
+    for (const sx of [-1, 1]) {
+      const t = new THREE.BufferGeometry();
+      t.setAttribute("position", new THREE.BufferAttribute(new Float32Array([
+        ...v(sx * wxH, 0, -wzH), ...v(sx * wxH, 0, wzH), ...v(sx * wxH, rise, 0),
+      ]), 3));
+      t.computeVertexNormals();
+      g.add(new THREE.Mesh(t, gableMat));
+    }
+    return g;
+  }
+
+  // A framed window built on the +Z plane (origin at its centre): a recessed glass
+  // pane, a four-bar white frame that stands proud of the wall, a cross mullion, a
+  // sill, and optional shutters. Rotate the returned group to mount it on any wall.
+  function makeWindow(s, withShutters) {
+    const g = new THREE.Group();
+    const w = 1.3 * s, hh = 1.5 * s, t = 0.12 * s, fr = 0.12 * s;
+    const glass = box(w - fr, hh - fr, 0.05 * s, glassMat); glass.position.z = -0.02 * s; g.add(glass);
+    const top = box(w + fr, fr, t, frameMat); top.position.set(0, hh / 2, 0.03 * s); g.add(top);
+    const bot = box(w + fr, fr, t, frameMat); bot.position.set(0, -hh / 2, 0.03 * s); g.add(bot);
+    const lft = box(fr, hh + fr, t, frameMat); lft.position.set(-w / 2, 0, 0.03 * s); g.add(lft);
+    const rgt = box(fr, hh + fr, t, frameMat); rgt.position.set(w / 2, 0, 0.03 * s); g.add(rgt);
+    const mv = box(0.05 * s, hh - fr, 0.05 * s, frameMat); mv.position.z = 0.02 * s; g.add(mv);
+    const mh = box(w - fr, 0.05 * s, 0.05 * s, frameMat); mh.position.z = 0.02 * s; g.add(mh);
+    const sill = box(w + 0.3 * s, 0.1 * s, 0.22 * s, frameMat); sill.position.set(0, -hh / 2 - 0.05 * s, 0.06 * s); g.add(sill);
+    if (withShutters) {
+      const m = shutterMats[Math.floor(Math.random() * shutterMats.length)];
+      for (const sx of [-1, 1]) {
+        const sh = box(0.28 * s, hh + fr, 0.06 * s, m);
+        sh.position.set(sx * (w / 2 + 0.22 * s), 0, 0.02 * s); g.add(sh);
+      }
+    }
+    return g;
+  }
+
+  // A panelled door on the +Z plane: slab + white frame surround + brass knob.
+  function makeDoor(s) {
+    const g = new THREE.Group();
+    const w = 1.1 * s, hh = 2.0 * s, fr = 0.13 * s;
+    const slab = box(w, hh, 0.1 * s, doorMats[Math.floor(Math.random() * doorMats.length)]); g.add(slab);
+    const top = box(w + 2 * fr, fr, 0.16 * s, frameMat); top.position.set(0, hh / 2 + fr / 2, 0.02 * s); g.add(top);
+    const lft = box(fr, hh + fr, 0.16 * s, frameMat); lft.position.set(-w / 2 - fr / 2, fr / 2, 0.02 * s); g.add(lft);
+    const rgt = box(fr, hh + fr, 0.16 * s, frameMat); rgt.position.set(w / 2 + fr / 2, fr / 2, 0.02 * s); g.add(rgt);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.07 * s, 8, 6), knobMat);
+    knob.position.set(w / 2 - 0.18 * s, 0, 0.08 * s); g.add(knob);
+    return g;
+  }
+
+  // One little house: foundation + (sometimes two-storey) body + gable roof +
+  // chimney + framed door/windows + shutters. Built facing +Z, then rotated.
   function house(x, z, rotY, s) {
     const h = new THREE.Group();
-    const W = 6 * s, D = 5 * s, H = 4 * s;
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(W, H, D),
-      new THREE.MeshStandardMaterial({ color: pick(WALLS), roughness: 1 })
-    );
-    body.position.y = H / 2; h.add(body);
-    const roof = new THREE.Mesh(
-      new THREE.ConeGeometry(W * 0.82, 2.4 * s, 4),
-      new THREE.MeshStandardMaterial({ color: pick(ROOFS), roughness: 0.95, flatShading: true })
-    );
-    roof.position.y = H + 1.2 * s; roof.rotation.y = Math.PI / 4; h.add(roof);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.0 * s, 1.9 * s, 0.12), doorMat);
-    door.position.set(0, 0.95 * s, D / 2 + 0.06); h.add(door);
-    for (const wx of [-W * 0.28, W * 0.28]) {
-      const win = new THREE.Mesh(new THREE.BoxGeometry(1.2 * s, 1.2 * s, 0.12), winMat);
-      win.position.set(wx, H * 0.58, D / 2 + 0.06); h.add(win);
+    const stories = Math.random() < 0.3 ? 2 : 1;
+    const W = 6 * s, D = 5 * s, storyH = 3.1 * s, H = storyH * stories;
+    const wallColor = pick(WALLS);
+    const wallMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 1 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: pick(ROOFS), roughness: 0.9, flatShading: true, side: THREE.DoubleSide });
+    const gableMat = new THREE.MeshStandardMaterial({ color: wallColor, roughness: 1, side: THREE.DoubleSide });
+
+    const plinthH = 0.4 * s;
+    const plinth = box(W + 0.25 * s, plinthH, D + 0.25 * s, foundationMat); plinth.position.y = plinthH / 2; h.add(plinth);
+    const body = box(W, H, D, wallMat); body.position.y = plinthH + H / 2; h.add(body);
+    const topY = plinthH + H;
+
+    const roof = gableRoof(W, D, 0.45 * s, 1.9 * s, roofMat, gableMat); roof.position.y = topY; h.add(roof);
+
+    const chim = box(0.7 * s, 1.7 * s, 0.7 * s, brickMat); chim.position.set(W * 0.28, topY + 0.85 * s, -D * 0.18); h.add(chim);
+    const cap = box(0.88 * s, 0.16 * s, 0.88 * s, capMat); cap.position.set(W * 0.28, topY + 1.7 * s, -D * 0.18); h.add(cap);
+
+    // front door (ground floor, left) + a concrete stoop
+    const door = makeDoor(s); door.position.set(-W * 0.22, plinthH + 1.0 * s, D / 2 + 0.05 * s); h.add(door);
+    const stoop = box(1.8 * s, 0.18 * s, 0.9 * s, stoopMat); stoop.position.set(-W * 0.22, plinthH + 0.09 * s, D / 2 + 0.45 * s); h.add(stoop);
+
+    // windows per storey: front (shuttered) + one on each side wall
+    const winY = (f) => plinthH + storyH * f + storyH * 0.55;
+    for (let f = 0; f < stories; f++) {
+      const xs = f === 0 ? [W * 0.22] : [-W * 0.24, W * 0.24]; // ground floor: door takes the left
+      for (const wx of xs) { const win = makeWindow(s, true); win.position.set(wx, winY(f), D / 2 + 0.04 * s); h.add(win); }
+      const left = makeWindow(s, false); left.rotation.y = -Math.PI / 2; left.position.set(-W / 2 - 0.04 * s, winY(f), 0); h.add(left);
+      const right = makeWindow(s, false); right.rotation.y = Math.PI / 2; right.position.set(W / 2 + 0.04 * s, winY(f), 0); h.add(right);
     }
+
     h.position.set(x, 0, z); h.rotation.y = rotY; group.add(h);
   }
 
@@ -253,7 +345,15 @@ export function buildNeighborhood(scene) {
     cloud(x, y, z, s);
   }
 
-  group.traverse((o) => { o.castShadow = false; o.receiveShadow = false; o.userData.excludeFromCapture = true; });
+  // The neighborhood is static and cosmetic: no shadows, never judged, and never
+  // moves — so bake each transform once and stop recomputing matrices per frame.
+  group.traverse((o) => {
+    o.castShadow = false;
+    o.receiveShadow = false;
+    o.userData.excludeFromCapture = true;
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
   scene.add(group);
   return group;
 }
