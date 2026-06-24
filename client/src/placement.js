@@ -754,7 +754,10 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
   function placeOnSurface(item, surf) {
     const instanceId = ++instanceCounter;
     const mesh = makeItemHolder(item, models, activeColorMap);
-    mesh.position.set(surf.x, surf.y + item.height / 2, surf.z);
+    // The holder's origin is the model's BOTTOM (it sits on y=0 for floor items),
+    // so to rest it ON the surface we put its origin AT the surface top — no
+    // half-height offset (that's only for the ghost, a box centred on its origin).
+    mesh.position.set(surf.x, surf.y, surf.z);
 
     const entry = { instanceId, item, mesh, surface: true, tiles: [] };
     mesh.traverse((obj) => {

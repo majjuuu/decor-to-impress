@@ -56,7 +56,7 @@ export const CATALOG = [
     height: 0.8,
     color: 0x5c6bc0, // indigo
     modelPath: "/models/desk.glb",
-    scale: 2.3,
+    scale: 2.7,
     baseRotation: 0,
     details: ["cup", "book"], // a mug + a book on the desk
     surface: true, // small objects can be placed on top
@@ -68,7 +68,7 @@ export const CATALOG = [
     height: 1.0,
     color: 0x26a69a, // teal
     modelPath: "/models/cabinetBedDrawer.glb",
-    scale: 3.38,
+    scale: 3.9,
     baseRotation: 0,
     surface: true, // small objects can be placed on top
   },
@@ -79,7 +79,7 @@ export const CATALOG = [
     height: 0.6,
     color: 0xec407a, // pink
     modelPath: "/models/bedDouble.glb",
-    scale: 1.98,
+    scale: 2.3,
     baseRotation: 90, // its long axis is on Z; footprint is wider on X, so turn it
   },
 
@@ -91,7 +91,7 @@ export const CATALOG = [
     height: 0.8,
     color: 0x6d8b74,
     modelPath: "/models/sofa.glb",
-    scale: 2.0,
+    scale: 2.5,
     baseRotation: 0,
     surface: true, // small objects can be placed on top
   },
@@ -114,7 +114,7 @@ export const CATALOG = [
     height: 1.8,
     color: 0x8d6e63,
     modelPath: "/models/bookshelf.glb",
-    scale: 2.0,
+    scale: 2.3,
     baseRotation: 0,
     surface: true, // small objects can be placed on top
   },
@@ -125,7 +125,7 @@ export const CATALOG = [
     height: 0.6,
     color: 0x5d4037,
     modelPath: "/models/tvStand.glb",
-    scale: 2.2,
+    scale: 2.6,
     baseRotation: 0,
     details: ["tv"], // a TV (screen on a stand) sits on top
     surface: true, // small objects can be placed on top
@@ -202,7 +202,7 @@ export const CATALOG = [
     height: 0.9,
     color: 0xfafafa,
     modelPath: "/models/toilet.glb",
-    scale: 1.9,
+    scale: 2.1,
     baseRotation: 0,
   },
   {
@@ -212,7 +212,7 @@ export const CATALOG = [
     height: 0.5,
     color: 0xe0f7fa,
     modelPath: "/models/bathtub.glb",
-    scale: 1.5,
+    scale: 2.4,
     baseRotation: 0,
   },
   {
@@ -222,7 +222,7 @@ export const CATALOG = [
     height: 0.8,
     color: 0xeceff1,
     modelPath: "/models/sink.glb",
-    scale: 1.5,
+    scale: 1.8,
     baseRotation: 0,
   },
 
