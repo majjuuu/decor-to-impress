@@ -203,22 +203,33 @@ export function buildAvatar(config = {}) {
 }
 
 function buildHair(head, R, gender, hairMat) {
+  // The face features sit on the +Z front of the head (eyes ~y=0.14R, brows ~0.34R).
+  // A FULL/low cap drapes down the front and hides them — the old bug. Instead the
+  // cap is a partial sphere cut high (small thetaLength) so its front rim is a
+  // HAIRLINE just above the brows, leaving the whole face clear. The back of the
+  // head is covered by a separate mass pushed back so it never reaches the face.
+
+  // top cap / hairline — rim ends ~0.4R up (above the 0.34R brows, well above eyes)
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(R * 1.06, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.38), hairMat);
+  cap.scale.set(1.06, 1.06, 1.08); head.add(cap);
+
+  // back-of-head mass: covers crown→nape and the sides, pushed back so its front
+  // face stays behind the eyes (front reaches only ~z=0.45R; eyes are at z=0.84R)
+  const back = new THREE.Mesh(new THREE.SphereGeometry(R * 1.02, 18, 14), hairMat);
+  back.scale.set(1.12, 1.12, 0.85); back.position.set(0, -R * 0.05, -R * 0.42); head.add(back);
+
   if (gender === "male") {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(R * 1.04, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), hairMat);
-    cap.scale.set(1.04, 1.0, 1.06); cap.position.set(0, R * 0.06, -R * 0.04); head.add(cap);
-    // little fringe sweep
-    const fringe = new THREE.Mesh(new THREE.BoxGeometry(R * 1.3, R * 0.3, R * 0.4), hairMat);
-    fringe.position.set(0, R * 0.62, R * 0.42); fringe.rotation.x = 0.3; head.add(fringe);
+    // a short fringe swept high on the forehead — sits above the brows
+    const fringe = new THREE.Mesh(new THREE.BoxGeometry(R * 1.2, R * 0.22, R * 0.35), hairMat);
+    fringe.position.set(0, R * 0.5, R * 0.5); fringe.rotation.x = 0.25; head.add(fringe);
   } else {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(R * 1.06, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.7), hairMat);
-    cap.scale.set(1.1, 1.05, 1.12); cap.position.set(0, R * 0.04, -R * 0.02); head.add(cap);
     // long hair down the back to the shoulders
-    const back = new THREE.Mesh(new THREE.CapsuleGeometry(R * 0.78, R * 1.5, 6, 12), hairMat);
-    back.scale.set(1.25, 1, 0.55); back.position.set(0, -R * 0.75, -R * 0.62); head.add(back);
-    // two side strands framing the face
+    const tail = new THREE.Mesh(new THREE.CapsuleGeometry(R * 0.85, R * 1.6, 6, 12), hairMat);
+    tail.scale.set(1.2, 1, 0.5); tail.position.set(0, -R * 0.85, -R * 0.7); head.add(tail);
+    // two side strands BEHIND the eye plane (z≈0.05R), framing the face at the ears
     for (const side of [-1, 1]) {
-      const strand = new THREE.Mesh(new THREE.CapsuleGeometry(R * 0.2, R * 1.0, 4, 8), hairMat);
-      strand.scale.set(1, 1, 0.6); strand.position.set(side * R * 0.92, -R * 0.35, R * 0.2); head.add(strand);
+      const strand = new THREE.Mesh(new THREE.CapsuleGeometry(R * 0.18, R * 0.95, 4, 8), hairMat);
+      strand.scale.set(1, 1, 0.5); strand.position.set(side * R * 0.95, -R * 0.4, R * 0.05); head.add(strand);
     }
   }
 }
