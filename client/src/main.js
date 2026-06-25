@@ -29,6 +29,8 @@ import { requestJudgeScore } from "./judge.js";
 import { preloadModels } from "./models.js";
 import { preloadSounds, unlock, play } from "./soundManager.js";
 import { CATALOG } from "./catalog.js";
+import { showAvatarPicker } from "./avatarPicker.js";
+import { createAvatarController } from "./avatarController.js";
 import "./style.css";
 
 // ---- Renderer ---------------------------------------------------------------
@@ -206,6 +208,9 @@ let ui;
 let game;
 let models = {};
 let selectedId = null;
+let avatarController = null; // the player's character (built after the picker)
+let currentActiveOffset = { x: 0, y: 0, z: 0 }; // active room offset (for explore exit)
+let exploring = false; // true while free-roaming the neighborhood
 
 function selectItem(item) {
   // Selection only works while playing (DESIGN). Gate it on the game state, not
@@ -286,6 +291,8 @@ async function init() {
     onFinish: () => { play("done"); game.finishGame(); },
     onRestart: () => { play("done"); game.restart(); },
     onNextHouse: () => { play("start"); game.nextHouse(); },
+    onExplore: () => enterExplore(),
+    onExploreExit: () => exitExplore(),
   });
   const capture = createCapture({ renderer, scene });
 
@@ -294,9 +301,11 @@ async function init() {
   function activateRoom(index) {
     const shell = shells[index];
     activeShell = shell; // so the wall-colour picker targets this room
+    currentActiveOffset = shell.offset; // remembered so explore can return here
     placement.setActiveRoom(shell);
     capture.setActiveRoom(shell.offset);
     shells.forEach((s, i) => { s.grid.visible = i === index; });
+    if (avatarController) avatarController.standInRoom(shell.offset); // avatar moves in
     focusRoom(shell.offset);
     // Move the sun + its shadow box over this room so shadows stay crisp.
     sun.position.set(shell.offset.x + SUN_DELTA.x, shell.offset.y + SUN_DELTA.y, shell.offset.z + SUN_DELTA.z);
@@ -326,20 +335,63 @@ async function init() {
     newHouse,
   });
 
+  // The player's avatar: stands in the active room during design, and can free-roam
+  // the neighborhood in explore mode (a follow-camera). Built from the picker config.
+  avatarController = createAvatarController({
+    scene,
+    camera,
+    getDesignActive: () => game.getState() === "DESIGN",
+    focusActiveRoom: (offset) => focusRoom(offset),
+  });
+
+  // Enter free-roam: pause the round clock, stash the design UI/controls, and hand
+  // the camera to the avatar follow-cam.
+  function enterExplore() {
+    if (exploring || game.getState() !== "DESIGN") return;
+    exploring = true;
+    game.pauseTimer();
+    deselect();
+    placement.setInputEnabled(false);
+    ui.setVisible(false);
+    controls.enabled = false;
+    screens.hideHud();
+    screens.showExplore();
+    avatarController.enterExplore();
+    play("start");
+  }
+  // Leave free-roam: avatar returns to the room, design camera + UI + clock resume.
+  function exitExplore() {
+    if (!exploring) return;
+    exploring = false;
+    avatarController.exitExplore(); // also restores the design camera
+    controls.enabled = true;
+    screens.hideExplore();
+    screens.showHud(game.getTheme());
+    ui.setVisible(true);
+    placement.setInputEnabled(true);
+    game.resumeTimer();
+    play("done");
+  }
+
   // Keyboard: only meaningful during DESIGN. Esc deselects; R rotates the active
   // item through 90° steps. (With nothing selected, left-clicking a placed item
   // deletes it — see placement.js, which also gates on input being enabled.)
   window.addEventListener("keydown", (e) => {
+    // While exploring, Esc returns to designing; movement keys are the controller's.
+    if (exploring) { if (e.key === "Escape") exitExplore(); return; }
     if (game.getState() !== "DESIGN") return;
     if (e.key === "Escape") deselect();
     if (e.key === "r" || e.key === "R") placement.rotateActiveItem();
   });
 
+  // Character creation first: show the picker, build the chosen avatar, then start.
   loadingEl.remove();
+  const avatarConfig = await showAvatarPicker();
+  avatarController.setConfig(avatarConfig);
   game.start(); // START screen (theme + Start button; nothing placeable yet)
 
   // Expose for debugging in the console.
-  window.__roomDesigner = { scene, camera, renderer, controls, shells, placement, grid, game, models, screens, capture };
+  window.__roomDesigner = { scene, camera, renderer, controls, shells, placement, grid, game, models, screens, capture, avatarController, enterExplore, exitExplore };
 }
 init();
 
@@ -356,9 +408,15 @@ window.addEventListener("resize", () => {
 // requestAnimationFrame asks the browser to call us again before the next
 // repaint (~60 times/sec). Each frame we update the controls (needed for
 // damping) and draw one image. This loop is the single heartbeat of the app.
+const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
-  controls.update(); // required when enableDamping is on
+  const dt = Math.min(clock.getDelta(), 0.05); // clamp so a tab-switch can't teleport the avatar
+  // While exploring, the avatar controller drives the camera (follow-cam), so we
+  // skip OrbitControls to avoid the two fighting over the camera each frame.
+  const isExploring = avatarController && avatarController.isExploring();
+  if (!isExploring) controls.update(); // required when enableDamping is on
+  if (avatarController) avatarController.update(dt);
   renderer.render(scene, camera);
 }
 animate();

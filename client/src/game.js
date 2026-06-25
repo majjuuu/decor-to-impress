@@ -254,6 +254,15 @@ export function createGame({
     transition(STATES.START);
   }
 
+  // Pause/resume the design countdown — used by Explore mode so roaming the
+  // neighborhood doesn't eat into the round's time. No-ops outside DESIGN.
+  function pauseTimer() {
+    if (state === STATES.DESIGN) timer.pause();
+  }
+  function resumeTimer() {
+    if (state === STATES.DESIGN) timer.resume();
+  }
+
   function getState() {
     return state;
   }
@@ -276,6 +285,8 @@ export function createGame({
     finishGame,
     restart,
     nextHouse,
+    pauseTimer,
+    resumeTimer,
     getState,
     getTheme,
     getRoom,

@@ -44,6 +44,24 @@ export function createCountdown({ durationMs, onTick, onExpire }) {
     }
   }
 
+  // Pause/resume: used by the "Explore" mode so wandering the neighborhood doesn't
+  // burn design time. pause() banks the remaining time and stops ticking; resume()
+  // rebuilds the end timestamp from the banked remainder so the clock picks up
+  // exactly where it left off.
+  let bankedRemaining = null;
+  function pause() {
+    if (intervalId === null) return;
+    bankedRemaining = getRemaining();
+    stop();
+  }
+  function resume() {
+    if (bankedRemaining === null) return;
+    endTime = Date.now() + bankedRemaining;
+    bankedRemaining = null;
+    tick();
+    intervalId = setInterval(tick, 200);
+  }
+
   function getRemaining() {
     return Math.max(0, endTime - Date.now());
   }
@@ -52,7 +70,7 @@ export function createCountdown({ durationMs, onTick, onExpire }) {
     return intervalId !== null;
   }
 
-  return { start, stop, getRemaining, isRunning };
+  return { start, stop, pause, resume, getRemaining, isRunning };
 }
 
 // Format milliseconds as m:ss. We ceil to the next whole second so the clock
