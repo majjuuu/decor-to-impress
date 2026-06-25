@@ -43,7 +43,7 @@ export function createScreens({ onStart, onDone, onRetry, onNext, onFinish, onRe
   const exploreBar = document.createElement("div");
   exploreBar.className = "explorebar";
   exploreBar.innerHTML = `
-    <span class="explorebar__hint">🎮 <strong>WASD</strong> / arrows to walk · explore your neighborhood</span>
+    <span class="explorebar__hint">🎮 <strong>WASD</strong>/arrows move · drag to look · <strong>Space</strong> jumps · walk into houses!</span>
     <button class="explorebar__exit btn btn--primary">← Back to designing</button>
   `;
   document.body.appendChild(exploreBar);

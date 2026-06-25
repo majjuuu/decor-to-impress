@@ -359,6 +359,98 @@ export function buildNeighborhood(scene) {
 }
 
 // =============================================================================
+// Show houses: a few ENTERABLE neighbor houses with open fronts and simple
+// auto-decorated rooms ("someone else's design"), so explore mode has somewhere
+// to go. Returns { group, colliders } — the colliders are the AABBs of each
+// house's three solid walls so the avatar can't walk through them (but can step
+// in through the open front). All cosmetic + excludeFromCapture.
+// =============================================================================
+export function buildShowHouses(scene) {
+  const group = new THREE.Group();
+  const wallMeshes = [];
+  const THEMES = [
+    { wall: 0xf3e7d3, floor: 0xb9966b, accent: 0xff8fab },
+    { wall: 0xdfeefb, floor: 0x9db9c9, accent: 0x6aa0ff },
+    { wall: 0xe6f3df, floor: 0xa9b98f, accent: 0x6fc16f },
+    { wall: 0xf3e0ef, floor: 0xb79bb0, accent: 0xc06ad6 },
+    { wall: 0xfdf0d8, floor: 0xc2a878, accent: 0xffb24a },
+  ];
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const W = 7, D = 6, H = 3, T = 0.15;
+
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a3b, roughness: 0.9 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf5f2ea, roughness: 0.8 });
+  const green = new THREE.MeshStandardMaterial({ color: 0x4f8f43, roughness: 1 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x888a90, roughness: 0.6 });
+
+  // A simple decorated room: rug, bed, bedside table + lamp, a plant.
+  function interior(h, accentColor) {
+    const accent = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.85 });
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(3, 2.2), new THREE.MeshStandardMaterial({ color: accentColor, roughness: 1 }));
+    rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.03, -0.4); h.add(rug);
+
+    const bed = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.4, 1.5), wood); base.position.y = 0.2; bed.add(base);
+    const matt = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.25, 1.4), white); matt.position.y = 0.52; bed.add(matt);
+    const blanket = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.12, 0.9), accent); blanket.position.set(0, 0.62, 0.25); bed.add(blanket);
+    const pillow = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.18, 0.4), white); pillow.position.set(0, 0.64, -0.5); bed.add(pillow);
+    const headboard = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.8, 0.15), wood); headboard.position.set(0, 0.6, -0.75); bed.add(headboard);
+    bed.position.set(-1.6, 0, 1.5); h.add(bed);
+
+    const table = new THREE.Group();
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 1.0), wood); top.position.y = 0.7; table.add(top);
+    for (const [sx, sz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), wood); leg.position.set(sx, 0.35, sz); table.add(leg);
+    }
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), metal); pole.position.y = 1.0; table.add(pole);
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.32, 12), accent); shade.position.y = 1.3; table.add(shade);
+    table.position.set(2.1, 0, 1.4); h.add(table);
+
+    const plant = new THREE.Group();
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.4, 10), wood); pot.position.y = 0.2; plant.add(pot);
+    const fol = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), green); fol.position.y = 0.8; plant.add(fol);
+    plant.position.set(2.6, 0, -1.9); h.add(plant);
+  }
+
+  function showHouse(px, pz, theme) {
+    const h = new THREE.Group();
+    const wallMat = new THREE.MeshStandardMaterial({ color: theme.wall, roughness: 1, side: THREE.DoubleSide });
+    const floorMat = new THREE.MeshStandardMaterial({ color: theme.floor, roughness: 0.95 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), floorMat);
+    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.02; h.add(floor);
+    // back (+Z), left (-X), right (+X); open front (-Z, toward the street/player)
+    const back = new THREE.Mesh(new THREE.BoxGeometry(W, H, T), wallMat); back.position.set(0, H / 2, D / 2);
+    const left = new THREE.Mesh(new THREE.BoxGeometry(T, H, D), wallMat); left.position.set(-W / 2, H / 2, 0);
+    const right = new THREE.Mesh(new THREE.BoxGeometry(T, H, D), wallMat); right.position.set(W / 2, H / 2, 0);
+    h.add(back, left, right);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(W * 0.85, 2.3, 4), new THREE.MeshStandardMaterial({ color: 0x9c5a47, roughness: 0.9, flatShading: true }));
+    roof.rotation.y = Math.PI / 4; roof.position.y = H + 1.15; h.add(roof);
+    interior(h, theme.accent);
+    h.position.set(px, 0, pz);
+    group.add(h);
+    for (const w of [back, left, right]) wallMeshes.push(w);
+  }
+
+  showHouse(-8, 29, pick(THEMES));
+  showHouse(22, 29, pick(THEMES));
+  showHouse(52, 29, pick(THEMES));
+
+  scene.add(group);
+  group.updateWorldMatrix(true, true);
+
+  // World-space AABB of each solid wall, for the explore-mode collider set.
+  const colliders = [];
+  const box = new THREE.Box3();
+  for (const w of wallMeshes) {
+    box.setFromObject(w);
+    colliders.push({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, minY: box.min.y, maxY: box.max.y });
+  }
+
+  group.traverse((o) => { o.castShadow = false; o.receiveShadow = false; o.userData.excludeFromCapture = true; });
+  return { group, colliders };
+}
+
+// =============================================================================
 // Endless houses: a HUGE grid of simple houses stretching out in every direction
 // to the fog line, so the neighborhood looks like it goes on forever (paired with
 // scene.fog in main.js, which fades the far edge into the sky — you never see

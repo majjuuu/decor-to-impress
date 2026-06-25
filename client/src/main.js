@@ -17,7 +17,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { buildHouse, buildRoof, buildGarden, buildNeighborhood, buildEndlessHouses, buildFrontGarden } from "./room.js";
+import { buildHouse, buildRoof, buildGarden, buildNeighborhood, buildEndlessHouses, buildFrontGarden, buildShowHouses } from "./room.js";
 import { ROOM_SIZE, grid } from "./grid.js";
 import { generateHouse } from "./rooms.js";
 import { buildCatalogUI } from "./ui.js";
@@ -167,6 +167,17 @@ buildGarden(scene); // trees + bushes around the house
 buildFrontGarden(scene); // fenced front yard with a path, flowers and trees
 buildNeighborhood(scene); // detailed near-houses + street so it reads as a neighborhood
 buildEndlessHouses(scene); // huge instanced house grid fading into fog → endless world
+const showHouses = buildShowHouses(scene); // enterable, auto-decorated neighbor houses
+
+// Static collider set for explore mode: every shell wall (upper-floor walls are
+// skipped at runtime by the avatar's feet-height check) + the show-house walls.
+// AABBs computed once here (geometry never moves).
+const _aabbBox = new THREE.Box3();
+function aabbOf(obj) {
+  _aabbBox.setFromObject(obj);
+  return { minX: _aabbBox.min.x, maxX: _aabbBox.max.x, minZ: _aabbBox.min.z, maxZ: _aabbBox.max.z, minY: _aabbBox.min.y, maxY: _aabbBox.max.y };
+}
+const exploreColliders = [...shells.flatMap((s) => s.walls.map(aabbOf)), ...showHouses.colliders];
 
 // ---- OrbitControls ----------------------------------------------------------
 // OrbitControls lets the user rotate (left-drag), zoom (wheel), and pan
@@ -176,6 +187,10 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0); // orbit around the room's centre
 controls.enableDamping = true; // adds a little inertia so motion feels smooth
 controls.dampingFactor = 0.08;
+// The avatar controller now drives the camera in BOTH views (first-person while
+// designing, follow-cam while exploring), so OrbitControls is disabled — we keep
+// the object only so its construction/listeners don't need unpicking.
+controls.enabled = false;
 
 // Clamp the controls so the view stays sensible:
 //   - maxPolarAngle just under 90° keeps the camera above the floor (it can't
@@ -187,17 +202,6 @@ controls.minPolarAngle = 0.05; // don't go perfectly top-down (avoids gimbal wei
 controls.minDistance = ROOM_SIZE * 0.45;
 controls.maxDistance = ROOM_SIZE * 1.5; // can't fly far from the room anymore
 controls.enablePan = false; // no panning — the view stays anchored on the room
-
-// Move the camera to look into a room at `offset` (from the open front + above),
-// zoomed in close on that room.
-function focusRoom(offset) {
-  const tx = offset.x;
-  const ty = offset.y + 1.2;
-  const tz = offset.z;
-  controls.target.set(tx, ty, tz);
-  camera.position.set(tx + ROOM_SIZE * 0.45, ty + ROOM_SIZE * 0.5, tz + ROOM_SIZE * 0.8);
-  controls.update();
-}
 
 // ---- Interactive systems (built after models preload) -----------------------
 // These reference each other, so we declare them here and assign in init() once
@@ -305,8 +309,7 @@ async function init() {
     placement.setActiveRoom(shell);
     capture.setActiveRoom(shell.offset);
     shells.forEach((s, i) => { s.grid.visible = i === index; });
-    if (avatarController) avatarController.standInRoom(shell.offset); // avatar moves in
-    focusRoom(shell.offset);
+    if (avatarController) avatarController.standInRoom(shell.offset); // avatar (+ FP camera) moves in
     // Move the sun + its shadow box over this room so shadows stay crisp.
     sun.position.set(shell.offset.x + SUN_DELTA.x, shell.offset.y + SUN_DELTA.y, shell.offset.z + SUN_DELTA.z);
     sun.target.position.set(shell.offset.x, shell.offset.y, shell.offset.z);
@@ -340,8 +343,11 @@ async function init() {
   avatarController = createAvatarController({
     scene,
     camera,
+    domElement: renderer.domElement,
     getDesignActive: () => game.getState() === "DESIGN",
-    focusActiveRoom: (offset) => focusRoom(offset),
+    // current room's furniture as collision boxes (so you can't walk through them)
+    getDesignColliders: () => placement.placedItems.map((p) => aabbOf(p.mesh)),
+    getExploreColliders: () => exploreColliders,
   });
 
   // Enter free-roam: pause the round clock, stash the design UI/controls, and hand
@@ -353,18 +359,16 @@ async function init() {
     deselect();
     placement.setInputEnabled(false);
     ui.setVisible(false);
-    controls.enabled = false;
     screens.hideHud();
     screens.showExplore();
     avatarController.enterExplore();
     play("start");
   }
-  // Leave free-roam: avatar returns to the room, design camera + UI + clock resume.
+  // Leave free-roam: avatar returns to the room (first-person), UI + clock resume.
   function exitExplore() {
     if (!exploring) return;
     exploring = false;
-    avatarController.exitExplore(); // also restores the design camera
-    controls.enabled = true;
+    avatarController.exitExplore(); // returns to first-person in the active room
     screens.hideExplore();
     screens.showHud(game.getTheme());
     ui.setVisible(true);
@@ -412,10 +416,7 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05); // clamp so a tab-switch can't teleport the avatar
-  // While exploring, the avatar controller drives the camera (follow-cam), so we
-  // skip OrbitControls to avoid the two fighting over the camera each frame.
-  const isExploring = avatarController && avatarController.isExploring();
-  if (!isExploring) controls.update(); // required when enableDamping is on
+  // The avatar controller owns the camera in both views (first-person + follow).
   if (avatarController) avatarController.update(dt);
   renderer.render(scene, camera);
 }
