@@ -368,6 +368,7 @@ export function buildNeighborhood(scene) {
 export function buildShowHouses(scene) {
   const group = new THREE.Group();
   const wallMeshes = [];
+  const propMeshes = []; // solid interior furniture, registered as colliders too
   const regions = []; // interior XZ+Y boxes, for "am I inside a house?" detection
   const THEMES = [
     { wall: 0xf3e7d3, floor: 0xb9966b, accent: 0xff8fab },
@@ -411,6 +412,9 @@ export function buildShowHouses(scene) {
     const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 0.4, 10), wood); pot.position.y = 0.2; plant.add(pot);
     const fol = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), green); fol.position.y = 0.8; plant.add(fol);
     plant.position.set(2.6, 0, -1.9); h.add(plant);
+
+    // these solid pieces become colliders so you bump into them (the rug is flat)
+    propMeshes.push(bed, table, plant);
   }
 
   function showHouse(px, pz, theme) {
@@ -444,10 +448,11 @@ export function buildShowHouses(scene) {
   scene.add(group);
   group.updateWorldMatrix(true, true);
 
-  // World-space AABB of each solid wall, for the explore-mode collider set.
+  // World-space AABB of every solid wall AND interior furniture piece, so the
+  // avatar can't walk through them.
   const colliders = [];
   const box = new THREE.Box3();
-  for (const w of wallMeshes) {
+  for (const w of [...wallMeshes, ...propMeshes]) {
     box.setFromObject(w);
     colliders.push({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, minY: box.min.y, maxY: box.max.y });
   }
