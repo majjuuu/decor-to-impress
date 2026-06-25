@@ -2,34 +2,33 @@
 // avatarController.js — places, moves, animates and "is" the player's avatar
 // =============================================================================
 //
-// Owns the avatar AND the camera. Two views:
-//   - "fp"  (non-explore): FIRST-PERSON. Camera sits at the avatar's eyes; the
-//           body is hidden and a hands viewmodel is shown (Minecraft-style). You
-//           drag to look, WASD to walk, Space to jump. Used while designing — you
-//           look down at the floor to place furniture.
-//   - "explore": THIRD-PERSON follow camera; the whole body is shown and you roam
-//           the neighborhood and walk into the show houses.
-// Movement is relative to where you're looking (yaw). Collision stops you walking
-// through furniture (in a room) and through house walls (out exploring). Gravity +
-// Space gives a jump.
+// Owns the avatar AND the camera. The view is FIRST-PERSON by default (camera at
+// the eyes, body hidden, hands viewmodel shown); the "Explore" button toggles a
+// THIRD-PERSON follow camera so you can see your character. Either way you can
+// roam freely — out of your room's open front, across the neighborhood, into the
+// show houses. One special rule: whenever you're INSIDE a house, the view forces
+// back to first-person ("avatar's POV inside the house"), even if you'd switched
+// to third-person outside.
+//
+// Movement is relative to where you're looking (yaw). Collision (circle-vs-AABB)
+// stops you walking through walls and furniture; Space + gravity gives a jump.
 
 import * as THREE from "three";
 import { buildAvatar, buildHands } from "./avatar.js";
 import { ROOM_SIZE } from "./grid.js";
 
-const ROOM_SPEED = 3.0;
-const EXPLORE_SPEED = 7.0;
+const SPEED = 5.5;          // walk speed (units/sec)
 const LOOK_SENS = 0.0028;
 const PITCH_MIN = -1.3, PITCH_MAX = 1.15;
 const GRAVITY = 16;
 const JUMP_V = 5.2;
-const RADIUS = 0.34; // avatar collision radius (xz)
+const RADIUS = 0.34;        // avatar collision radius (xz)
+const BODY_H = 1.7;
 
-export function createAvatarController({ scene, camera, domElement, getDesignActive, getDesignColliders, getExploreColliders }) {
-  let avatar = null;
-  let hands = null;
-  let config = null;
-  let mode = "hidden"; // hidden | fp | explore
+export function createAvatarController({ scene, camera, domElement, getDesignActive, getColliders, getHouseRegions }) {
+  let avatar = null, hands = null;
+  let active = false;        // becomes true once the avatar is in the world
+  let userPOV = "fp";        // "fp" | "third"  (what the Explore button chose)
   let roomOffset = { x: 0, y: 0, z: 0 };
   let yaw = 0, pitch = -0.15;
   let walkPhase = 0, swing = 0, bob = 0;
@@ -39,8 +38,8 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
   const keys = new Set();
   const MOVE_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
   const onKeyDown = (e) => {
+    if (!active) return;
     const k = e.key.toLowerCase();
-    if (mode === "hidden") return;
     if (k === " ") { tryJump(); e.preventDefault(); return; }
     if (MOVE_KEYS.has(k)) keys.add(k);
   };
@@ -49,12 +48,11 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
   window.addEventListener("keyup", onKeyUp);
 
   let dragging = false, lastX = 0, lastY = 0;
-  const onPointerDown = (e) => { if (e.button === 0 && mode !== "hidden") { dragging = true; lastX = e.clientX; lastY = e.clientY; } };
+  const onPointerDown = (e) => { if (e.button === 0 && active) { dragging = true; lastX = e.clientX; lastY = e.clientY; } };
   const onPointerMove = (e) => {
     if (!dragging) return;
     yaw -= (e.clientX - lastX) * LOOK_SENS;
-    pitch -= (e.clientY - lastY) * LOOK_SENS;
-    pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch));
+    pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch - (e.clientY - lastY) * LOOK_SENS));
     lastX = e.clientX; lastY = e.clientY;
   };
   const onPointerUp = () => { dragging = false; };
@@ -63,7 +61,6 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
   window.addEventListener("pointerup", onPointerUp);
 
   function setConfig(cfg) {
-    config = cfg;
     if (avatar) { scene.remove(avatar.group); disposeTree(avatar.group); }
     if (hands) { camera.remove(hands); disposeTree(hands); }
     avatar = buildAvatar(cfg);
@@ -71,30 +68,45 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
     hands = buildHands(cfg);
     camera.add(hands);
     if (!camera.parent) scene.add(camera); // so the hands (children of camera) render
-    applyModeVisibility();
   }
 
-  function applyModeVisibility() {
-    if (!avatar) return;
-    avatar.group.visible = mode === "explore"; // body shown only in 3rd person
-    if (hands) hands.visible = mode === "fp";
+  // Is the avatar standing inside any house (a player room or a show house)?
+  function insideHouse(p) {
+    const regions = getHouseRegions ? getHouseRegions() : [];
+    for (const r of regions) {
+      if (p.x > r.minX && p.x < r.maxX && p.z > r.minZ && p.z < r.maxZ && p.y > r.minY && p.y < r.maxY) return true;
+    }
+    return false;
+  }
+  // First-person is forced inside houses; otherwise honour the Explore toggle.
+  function effectiveFP() { return avatar ? (userPOV === "fp" || insideHouse(avatar.group.position)) : true; }
+  function withinActiveRoom(p) {
+    const h = ROOM_SIZE / 2;
+    return p.x > roomOffset.x - h && p.x < roomOffset.x + h && p.z > roomOffset.z - h && p.z < roomOffset.z + h;
   }
 
-  // Stand in the active room (first-person). Called by activateRoom.
+  // Stand in the active room (first-person), facing into it. Called on room change.
   function standInRoom(offset) {
     roomOffset = offset;
-    if (mode === "explore" || !avatar) return;
-    mode = "fp";
+    active = true;
+    userPOV = "fp"; // each new room starts in first person
     avatar.group.position.set(offset.x, offset.y, offset.z + ROOM_SIZE * 0.32);
-    yaw = Math.PI; pitch = -0.2; // face into the room (toward -Z / the back wall)
-    vy = 0; grounded = true;
-    applyModeVisibility();
+    yaw = Math.PI; pitch = -0.2; vy = 0; grounded = true;
+    refreshVisibility();
     positionCamera();
   }
 
+  function refreshVisibility() {
+    if (!avatar) return;
+    const fp = effectiveFP();
+    avatar.group.visible = !fp;       // body only in third-person
+    if (hands) hands.visible = fp;    // hands only in first-person
+  }
+
+  function togglePOV() { userPOV = userPOV === "fp" ? "third" : "fp"; refreshVisibility(); positionCamera(); }
+
   function tryJump() {
-    if (!avatar || mode === "hidden") return;
-    if (mode === "fp" && !getDesignActive()) return;
+    if (!avatar || !active || !getDesignActive()) return;
     if (grounded) { vy = JUMP_V; grounded = false; }
   }
 
@@ -108,62 +120,49 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
   }
 
   function update(dt) {
-    if (!avatar || mode === "hidden") return;
+    if (!avatar || !active) return;
     const p = avatar.group.position;
-    const canMove = mode === "explore" || getDesignActive();
-    const inp = canMove ? inputDir() : { f: 0, s: 0, moving: false };
+    const inp = getDesignActive() ? inputDir() : { f: 0, s: 0, moving: false };
 
     if (inp.moving) {
-      // move relative to look direction (yaw): forward = (sin,cos), right = (cos,-sin)
       let dx = Math.sin(yaw) * inp.f + Math.cos(yaw) * inp.s;
       let dz = Math.cos(yaw) * inp.f - Math.sin(yaw) * inp.s;
-      const len = Math.hypot(dx, dz) || 1;
-      dx /= len; dz /= len;
-      const speed = mode === "explore" ? EXPLORE_SPEED : ROOM_SPEED;
-      p.x += dx * speed * dt;
-      p.z += dz * speed * dt;
-      avatar.group.rotation.y = Math.atan2(dx, dz); // face travel direction
+      const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
+      p.x += dx * SPEED * dt;
+      p.z += dz * SPEED * dt;
+      avatar.group.rotation.y = Math.atan2(dx, dz);
       walkPhase += dt * 9;
     }
 
-    // ---- gravity / jump ----
-    const groundY = mode === "fp" ? roomOffset.y : 0;
+    // gravity / jump — stand on the active room floor while inside it, else ground
+    const groundY = withinActiveRoom(p) ? roomOffset.y : 0;
     vy -= GRAVITY * dt;
     p.y += vy * dt;
     if (p.y <= groundY) { p.y = groundY; vy = 0; grounded = true; }
 
-    // ---- collision + bounds ----
-    if (mode === "fp") {
-      const cols = getDesignColliders ? getDesignColliders() : [];
-      resolveColliders(p, cols);
-      const lim = ROOM_SIZE / 2 - RADIUS - 0.15; // stay inside the room footprint
-      p.x = clamp(p.x, roomOffset.x - lim, roomOffset.x + lim);
-      p.z = clamp(p.z, roomOffset.z - lim, roomOffset.z + lim);
-    } else {
-      resolveColliders(p, getExploreColliders ? getExploreColliders() : []);
-    }
+    resolveColliders(p, getColliders ? getColliders() : []);
 
-    // ---- limb / view animation ----
+    // limb / view animation
     const targetSwing = inp.moving ? Math.sin(walkPhase) * 0.5 : 0;
     swing += (targetSwing - swing) * 0.25;
-    if (mode === "explore") {
-      const [legL, legR] = avatar.parts.legs;
-      const [armL, armR] = avatar.parts.arms;
+    const fp = effectiveFP();
+    if (!fp) {
+      const [legL, legR] = avatar.parts.legs, [armL, armR] = avatar.parts.arms;
       legL.rotation.x = swing; legR.rotation.x = -swing;
       armL.rotation.x = -swing; armR.rotation.x = swing;
     }
-    // gentle hand bob in first person
     const targetBob = inp.moving ? Math.sin(walkPhase * 2) * 0.5 : 0;
     bob += (targetBob - bob) * 0.2;
-    if (hands && mode === "fp") hands.position.y = bob * 0.02;
+    if (hands && fp) hands.position.y = bob * 0.02;
 
+    refreshVisibility();
     positionCamera();
   }
 
   function positionCamera() {
     if (!avatar) return;
     const p = avatar.group.position;
-    if (mode === "fp") {
+    if (effectiveFP()) {
       const eye = p.y + avatar.eyeY;
       camera.position.set(p.x, eye, p.z);
       const cp = Math.cos(pitch);
@@ -175,45 +174,24 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
     }
   }
 
-  function enterExplore() {
-    if (!avatar) return;
-    mode = "explore";
-    avatar.group.position.set(roomOffset.x, 0, 10); // out on the front lawn
-    yaw = 0; pitch = 0; vy = 0; grounded = true;
-    applyModeVisibility();
-    positionCamera();
-  }
-
-  function exitExplore() {
-    if (!avatar) return;
-    mode = "fp";
-    standInRoom(roomOffset);
-  }
-
-  function setHidden() { mode = "hidden"; applyModeVisibility(); }
+  function setHidden() { active = false; if (avatar) avatar.group.visible = false; if (hands) hands.visible = false; }
 
   return {
     setConfig,
     standInRoom,
-    enterExplore,
-    exitExplore,
+    togglePOV,
     setHidden,
     update,
-    isExploring: () => mode === "explore",
+    isThirdPerson: () => userPOV === "third",
     hasAvatar: () => !!avatar,
-    _debug: () => ({ mode, keys: [...keys], yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2), grounded, pos: avatar ? avatar.group.position.toArray().map((n) => +n.toFixed(2)) : null }),
+    _debug: () => ({ active, userPOV, fp: effectiveFP(), inside: avatar ? insideHouse(avatar.group.position) : null, grounded, pos: avatar ? avatar.group.position.toArray().map((n) => +n.toFixed(2)) : null }),
   };
 }
 
-const BODY_H = 1.7; // avatar height, for vertical collision overlap
-
-// Resolve circle-vs-AABB in the XZ plane; pushes `p` out of any box it overlaps.
-// Only collides when the avatar's vertical span overlaps the box, so you can jump
-// OVER low furniture and never snag on the walls of the floor ABOVE you.
 function resolveColliders(p, boxes) {
   for (const b of boxes) {
-    if (p.y >= b.maxY - 0.05) continue;            // feet above the box -> jumped over / on top
-    if (p.y + BODY_H <= (b.minY || 0)) continue;   // box is entirely above the avatar (upper floor)
+    if (p.y >= b.maxY - 0.05) continue;            // feet above the box -> over/on top
+    if (p.y + BODY_H <= (b.minY || 0)) continue;   // box entirely above (upper floor)
     const cx = clamp(p.x, b.minX, b.maxX);
     const cz = clamp(p.z, b.minZ, b.maxZ);
     const dx = p.x - cx, dz = p.z - cz;
@@ -223,7 +201,6 @@ function resolveColliders(p, boxes) {
       const d = Math.sqrt(d2), push = RADIUS - d;
       p.x += (dx / d) * push; p.z += (dz / d) * push;
     } else {
-      // centre inside the box: pop out the nearest edge
       const l = p.x - b.minX, r = b.maxX - p.x, bk = p.z - b.minZ, fr = b.maxZ - p.z;
       const mn = Math.min(l, r, bk, fr);
       if (mn === l) p.x = b.minX - RADIUS; else if (mn === r) p.x = b.maxX + RADIUS;

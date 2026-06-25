@@ -32,7 +32,7 @@ export function buildCatalogUI({ onSelect, onColorChange, onWallColorChange }) {
   const hint = document.createElement("p");
   hint.className = "catalog__hint";
   hint.textContent =
-    "You're in first person: WASD to walk, drag to look, Space to jump. Pick an item, then click the floor to place it. R rotates · Esc deselects · click a placed piece (nothing selected) to delete.";
+    "First person: WASD to walk (you can leave the house!), drag to look, Space to jump, 👁 button for 3rd person. Pick an item then click the floor to place. R rotates · Esc deselects · click a door to open it · click a placed piece to delete.";
   panel.appendChild(hint);
 
   // The list of item buttons lives in its own container so we can rebuild it per

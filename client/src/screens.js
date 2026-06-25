@@ -13,7 +13,7 @@
 
 import { CRITERIA_LABELS } from "./rubric.js";
 
-export function createScreens({ onStart, onDone, onRetry, onNext, onFinish, onRestart, onNextHouse, onExplore, onExploreExit }) {
+export function createScreens({ onStart, onDone, onRetry, onNext, onFinish, onRestart, onNextHouse, onExplore }) {
   // ---- Overlay root --------------------------------------------------------
   const overlay = document.createElement("div");
   overlay.className = "overlay";
@@ -29,26 +29,21 @@ export function createScreens({ onStart, onDone, onRetry, onNext, onFinish, onRe
   hud.innerHTML = `
     <div class="hud__theme"><span class="hud__label">Theme</span> <span class="hud__theme-name"></span></div>
     <div class="hud__timer">5:00</div>
-    <button class="hud__explore btn">🚶 Explore</button>
+    <button class="hud__explore btn">👁 3rd person</button>
     <button class="hud__done btn btn--primary">Done</button>
   `;
   document.body.appendChild(hud);
   const hudThemeName = hud.querySelector(".hud__theme-name");
   const hudTimer = hud.querySelector(".hud__timer");
+  const exploreBtn = hud.querySelector(".hud__explore");
   hud.querySelector(".hud__done").addEventListener("click", () => onDone());
-  hud.querySelector(".hud__explore").addEventListener("click", () => onExplore && onExplore());
+  exploreBtn.addEventListener("click", () => onExplore && onExplore());
   hud.style.display = "none";
 
-  // ---- EXPLORE bar (shown while free-roaming the neighborhood) --------------
-  const exploreBar = document.createElement("div");
-  exploreBar.className = "explorebar";
-  exploreBar.innerHTML = `
-    <span class="explorebar__hint">🎮 <strong>WASD</strong>/arrows move · drag to look · <strong>Space</strong> jumps · walk into houses!</span>
-    <button class="explorebar__exit btn btn--primary">← Back to designing</button>
-  `;
-  document.body.appendChild(exploreBar);
-  exploreBar.querySelector(".explorebar__exit").addEventListener("click", () => onExploreExit && onExploreExit());
-  exploreBar.style.display = "none";
+  // Toggle the camera button's label between first- and third-person.
+  function setPovLabel(isThird) {
+    exploreBtn.textContent = isThird ? "🙂 1st person" : "👁 3rd person";
+  }
 
   // ---- Helpers -------------------------------------------------------------
   // animToken is the cleanup mechanism for time-based animations: every screen
@@ -257,12 +252,6 @@ export function createScreens({ onStart, onDone, onRetry, onNext, onFinish, onRe
   function hideHud() {
     hud.style.display = "none";
   }
-  function showExplore() {
-    exploreBar.style.display = "flex";
-  }
-  function hideExplore() {
-    exploreBar.style.display = "none";
-  }
   function updateTimer(text) {
     hudTimer.textContent = text;
   }
@@ -281,8 +270,7 @@ export function createScreens({ onStart, onDone, onRetry, onNext, onFinish, onRe
     hideOverlay,
     showHud,
     hideHud,
-    showExplore,
-    hideExplore,
+    setPovLabel,
     updateTimer,
     setTimerWarning,
   };

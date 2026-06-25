@@ -17,7 +17,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { buildHouse, buildRoof, buildGarden, buildNeighborhood, buildEndlessHouses, buildFrontGarden, buildShowHouses } from "./room.js";
+import { buildHouse, buildRoof, buildGarden, buildNeighborhood, buildEndlessHouses, buildFrontGarden, buildShowHouses, WALL_HEIGHT } from "./room.js";
 import { ROOM_SIZE, grid } from "./grid.js";
 import { generateHouse } from "./rooms.js";
 import { buildCatalogUI } from "./ui.js";
@@ -177,7 +177,19 @@ function aabbOf(obj) {
   _aabbBox.setFromObject(obj);
   return { minX: _aabbBox.min.x, maxX: _aabbBox.max.x, minZ: _aabbBox.min.z, maxZ: _aabbBox.max.z, minY: _aabbBox.min.y, maxY: _aabbBox.max.y };
 }
-const exploreColliders = [...shells.flatMap((s) => s.walls.map(aabbOf)), ...showHouses.colliders];
+const wallColliders = [...shells.flatMap((s) => s.walls.map(aabbOf)), ...showHouses.colliders];
+
+// Interior regions (player rooms + show houses) for "am I inside a house?" — used
+// to force first-person whenever the avatar is indoors. Shrunk a little so the open
+// front reads as outside.
+const houseRegions = [
+  ...shells.map((s) => ({
+    minX: s.offset.x - ROOM_SIZE / 2 + 0.4, maxX: s.offset.x + ROOM_SIZE / 2 - 0.4,
+    minZ: s.offset.z - ROOM_SIZE / 2 + 0.4, maxZ: s.offset.z + ROOM_SIZE / 2 - 0.4,
+    minY: s.offset.y - 0.5, maxY: s.offset.y + WALL_HEIGHT,
+  })),
+  ...showHouses.regions,
+];
 
 // ---- OrbitControls ----------------------------------------------------------
 // OrbitControls lets the user rotate (left-drag), zoom (wheel), and pan
@@ -213,8 +225,7 @@ let game;
 let models = {};
 let selectedId = null;
 let avatarController = null; // the player's character (built after the picker)
-let currentActiveOffset = { x: 0, y: 0, z: 0 }; // active room offset (for explore exit)
-let exploring = false; // true while free-roaming the neighborhood
+let currentActiveOffset = { x: 0, y: 0, z: 0 }; // active room offset
 
 function selectItem(item) {
   // Selection only works while playing (DESIGN). Gate it on the game state, not
@@ -295,8 +306,7 @@ async function init() {
     onFinish: () => { play("done"); game.finishGame(); },
     onRestart: () => { play("done"); game.restart(); },
     onNextHouse: () => { play("start"); game.nextHouse(); },
-    onExplore: () => enterExplore(),
-    onExploreExit: () => exitExplore(),
+    onExplore: () => togglePOV(),
   });
   const capture = createCapture({ renderer, scene });
 
@@ -310,6 +320,7 @@ async function init() {
     capture.setActiveRoom(shell.offset);
     shells.forEach((s, i) => { s.grid.visible = i === index; });
     if (avatarController) avatarController.standInRoom(shell.offset); // avatar (+ FP camera) moves in
+    screens.setPovLabel(false); // each room starts in first person
     // Move the sun + its shadow box over this room so shadows stay crisp.
     sun.position.set(shell.offset.x + SUN_DELTA.x, shell.offset.y + SUN_DELTA.y, shell.offset.z + SUN_DELTA.z);
     sun.target.position.set(shell.offset.x, shell.offset.y, shell.offset.z);
@@ -345,44 +356,25 @@ async function init() {
     camera,
     domElement: renderer.domElement,
     getDesignActive: () => game.getState() === "DESIGN",
-    // current room's furniture as collision boxes (so you can't walk through them)
-    getDesignColliders: () => placement.placedItems.map((p) => aabbOf(p.mesh)),
-    getExploreColliders: () => exploreColliders,
+    // walls (so you can't walk through them, but can leave via open fronts) + the
+    // current room's furniture (so you can't walk through that either)
+    getColliders: () => [...wallColliders, ...placement.placedItems.map((p) => aabbOf(p.mesh))],
+    getHouseRegions: () => houseRegions,
   });
 
-  // Enter free-roam: pause the round clock, stash the design UI/controls, and hand
-  // the camera to the avatar follow-cam.
-  function enterExplore() {
-    if (exploring || game.getState() !== "DESIGN") return;
-    exploring = true;
-    game.pauseTimer();
-    deselect();
-    placement.setInputEnabled(false);
-    ui.setVisible(false);
-    screens.hideHud();
-    screens.showExplore();
-    avatarController.enterExplore();
+  // The "Explore" button is now just a CAMERA toggle: first-person (default) ⇄
+  // third-person. You can roam freely in either; stepping inside any house forces
+  // first-person automatically (handled in the controller).
+  function togglePOV() {
+    avatarController.togglePOV();
+    screens.setPovLabel(avatarController.isThirdPerson());
     play("start");
-  }
-  // Leave free-roam: avatar returns to the room (first-person), UI + clock resume.
-  function exitExplore() {
-    if (!exploring) return;
-    exploring = false;
-    avatarController.exitExplore(); // returns to first-person in the active room
-    screens.hideExplore();
-    screens.showHud(game.getTheme());
-    ui.setVisible(true);
-    placement.setInputEnabled(true);
-    game.resumeTimer();
-    play("done");
   }
 
   // Keyboard: only meaningful during DESIGN. Esc deselects; R rotates the active
   // item through 90° steps. (With nothing selected, left-clicking a placed item
   // deletes it — see placement.js, which also gates on input being enabled.)
   window.addEventListener("keydown", (e) => {
-    // While exploring, Esc returns to designing; movement keys are the controller's.
-    if (exploring) { if (e.key === "Escape") exitExplore(); return; }
     if (game.getState() !== "DESIGN") return;
     if (e.key === "Escape") deselect();
     if (e.key === "r" || e.key === "R") placement.rotateActiveItem();
@@ -395,7 +387,7 @@ async function init() {
   game.start(); // START screen (theme + Start button; nothing placeable yet)
 
   // Expose for debugging in the console.
-  window.__roomDesigner = { scene, camera, renderer, controls, shells, placement, grid, game, models, screens, capture, avatarController, enterExplore, exitExplore };
+  window.__roomDesigner = { scene, camera, renderer, controls, shells, placement, grid, game, models, screens, capture, avatarController, togglePOV };
 }
 init();
 

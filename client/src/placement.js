@@ -668,8 +668,13 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
         if (!placed) play("invalid"); // clicked an occupied/overflowing tile
       }
     } else {
+      // Nothing selected = interact mode. Clicking a DOOR opens/closes it; clicking
+      // any other placed piece deletes it (right-click still deletes doors too).
       const target = placedUnderPointer(event);
-      if (target) removePlaced(target);
+      if (target) {
+        if (target.mesh.userData.isDoor) toggleDoor(target);
+        else removePlaced(target);
+      }
     }
   }
 
@@ -728,10 +733,37 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     const instanceId = ++instanceCounter;
     occupyWall(wallId, index, instanceId);
 
-    const mesh = makeItemHolder(item, models, activeColorMap);
+    const holder = makeItemHolder(item, models, activeColorMap);
     const t = wallSegmentTransform(wallId, index);
-    mesh.position.set(t.x + roomOff.x, roomOff.y + (item.mountY || 0), t.z + roomOff.z);
-    mesh.rotation.y = t.rotationY;
+
+    let mesh;
+    if (item.id === "door") {
+      // Wrap the door in a HINGE PIVOT at one edge so a click can swing it open.
+      // The pivot sits at the segment's edge; the door leaf extends from it, so
+      // rotating the pivot rotates the door about its hinge (not its centre).
+      const bb = new THREE.Box3().setFromObject(holder);
+      const w = Math.max(0.6, bb.max.x - bb.min.x);
+      const along = new THREE.Vector3(Math.cos(t.rotationY), 0, -Math.sin(t.rotationY)); // wall direction
+      const pivot = new THREE.Group();
+      pivot.position.set(
+        t.x + roomOff.x - along.x * (w / 2),
+        roomOff.y + (item.mountY || 0),
+        t.z + roomOff.z - along.z * (w / 2)
+      );
+      pivot.rotation.y = t.rotationY;
+      holder.position.x = w / 2; // hinge at the pivot origin; leaf spans 0..w
+      holder.rotation.y = 0;
+      pivot.add(holder);
+      pivot.userData.isDoor = true;
+      pivot.userData.closedYaw = t.rotationY;
+      pivot.userData.openYaw = t.rotationY - Math.PI * 0.45; // swing ~80° open
+      pivot.userData.doorOpen = false;
+      mesh = pivot;
+    } else {
+      holder.position.set(t.x + roomOff.x, roomOff.y + (item.mountY || 0), t.z + roomOff.z);
+      holder.rotation.y = t.rotationY;
+      mesh = holder;
+    }
 
     const entry = { instanceId, item, mesh, wall: { wallId, index } };
     mesh.traverse((obj) => {
@@ -745,6 +777,28 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     popIn(mesh);
     updateGhost();
     return entry;
+  }
+
+  // Open/close a placed door by swinging its hinge pivot, with a little easing.
+  function toggleDoor(entry) {
+    const pivot = entry.mesh;
+    if (!pivot.userData.isDoor) return;
+    pivot.userData.doorOpen = !pivot.userData.doorOpen;
+    const target = pivot.userData.doorOpen ? pivot.userData.openYaw : pivot.userData.closedYaw;
+    play(pivot.userData.doorOpen ? "place" : "delete"); // a small click either way
+    const start = pivot.rotation.y;
+    const DUR = 280;
+    const t0 = performance.now();
+    function step(now) {
+      if (!pivot.parent) return;
+      const k = Math.min(1, (now - t0) / DUR);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // easeInOutQuad
+      pivot.rotation.y = start + (target - start) * e;
+      if (k < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+    // Fallback so the door always reaches its resting angle even if rAF is throttled.
+    setTimeout(() => { if (pivot.parent) pivot.rotation.y = target; }, DUR + 50);
   }
 
   // Place a small object ON TOP of an already-placed surface (shelf/table). The
@@ -917,6 +971,7 @@ export function createPlacementSystem({ scene, camera, floor, domElement, models
     rotateActiveItem,
     place, // exposed for programmatic placement / tests
     placeWall, // exposed for tests
+    toggleDoor, // open/close a placed door (exposed for tests)
     placeOnSurface, // drop a small object onto a shelf/table surface
     surfaceUnderPointer, // exposed for tests (which surface is under the cursor)
     removePlaced, // exposed for programmatic deletion / tests

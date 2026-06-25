@@ -368,6 +368,7 @@ export function buildNeighborhood(scene) {
 export function buildShowHouses(scene) {
   const group = new THREE.Group();
   const wallMeshes = [];
+  const regions = []; // interior XZ+Y boxes, for "am I inside a house?" detection
   const THEMES = [
     { wall: 0xf3e7d3, floor: 0xb9966b, accent: 0xff8fab },
     { wall: 0xdfeefb, floor: 0x9db9c9, accent: 0x6aa0ff },
@@ -429,6 +430,8 @@ export function buildShowHouses(scene) {
     h.position.set(px, 0, pz);
     group.add(h);
     for (const w of [back, left, right]) wallMeshes.push(w);
+    // interior region (shrunk a touch so the open front reads as "outside")
+    regions.push({ minX: px - W / 2 + 0.4, maxX: px + W / 2 - 0.4, minZ: pz - D / 2 + 0.4, maxZ: pz + D / 2 - 0.4, minY: -0.5, maxY: H });
   }
 
   showHouse(-8, 29, pick(THEMES));
@@ -447,7 +450,7 @@ export function buildShowHouses(scene) {
   }
 
   group.traverse((o) => { o.castShadow = false; o.receiveShadow = false; o.userData.excludeFromCapture = true; });
-  return { group, colliders };
+  return { group, colliders, regions };
 }
 
 // =============================================================================
