@@ -125,8 +125,9 @@ export function createAvatarController({ scene, camera, domElement, getDesignAct
     const inp = getDesignActive() ? inputDir() : { f: 0, s: 0, moving: false };
 
     if (inp.moving) {
-      let dx = Math.sin(yaw) * inp.f + Math.cos(yaw) * inp.s;
-      let dz = Math.cos(yaw) * inp.f - Math.sin(yaw) * inp.s;
+      // forward = (sin yaw, cos yaw); strafe-right = camera right = (-cos yaw, sin yaw)
+      let dx = Math.sin(yaw) * inp.f - Math.cos(yaw) * inp.s;
+      let dz = Math.cos(yaw) * inp.f + Math.sin(yaw) * inp.s;
       const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
       p.x += dx * SPEED * dt;
       p.z += dz * SPEED * dt;

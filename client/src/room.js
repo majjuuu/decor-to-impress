@@ -434,9 +434,12 @@ export function buildShowHouses(scene) {
     regions.push({ minX: px - W / 2 + 0.4, maxX: px + W / 2 - 0.4, minZ: pz - D / 2 + 0.4, maxZ: pz + D / 2 - 0.4, minY: -0.5, maxY: H });
   }
 
-  showHouse(-8, 29, pick(THEMES));
-  showHouse(22, 29, pick(THEMES));
-  showHouse(52, 29, pick(THEMES));
+  // Placed on a clear strip BEYOND the decorative front row (z≈32) and before the
+  // endless grid (z>52), in the x-gaps between front-row houses, so the player can
+  // walk straight up to them and nothing solid overlaps their interiors.
+  showHouse(8, 44, pick(THEMES));
+  showHouse(20, 44, pick(THEMES));
+  showHouse(33, 44, pick(THEMES));
 
   scene.add(group);
   group.updateWorldMatrix(true, true);
