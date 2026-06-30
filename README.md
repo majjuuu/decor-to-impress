@@ -9,6 +9,27 @@ Built with **Three.js** (vanilla, no framework) for the 3D, a small **serverless
 backend** that proxies the Anthropic API for the AI judge, and a procedural house
 generator. Inspired by the "design under pressure, then get rated" loop.
 
+## Demo
+
+▶️ **Play locally:** see [Run locally](#run-locally) · **Deploy your own:** see [DEPLOY.md](DEPLOY.md)
+
+<!-- DEMO VIDEO — to embed a gameplay clip:
+     1. Record a short screen capture while playing (Windows: Win+G Game Bar; Mac: Cmd+Shift+5). ~30–60s, under 100 MB.
+     2. Open a new Issue on this repo and DRAG the video into the comment box — GitHub uploads it and gives a
+        URL like https://github.com/user-attachments/assets/xxxx . (You don't have to submit the issue.)
+     3. Paste that URL on its own line below — GitHub renders it as a video player. Then delete these comments. -->
+<!-- https://github.com/user-attachments/assets/PASTE-VIDEO-URL-HERE -->
+
+### Screenshots
+
+<!-- Put PNGs in docs/screenshots/ (suggested names below), then uncomment this table:
+| Create your character | Designing (first person) | Exploring the neighborhood |
+|---|---|---|
+| ![picker](docs/screenshots/picker.png) | ![design](docs/screenshots/design.png) | ![explore](docs/screenshots/explore.png) |
+-->
+
+_No media yet — see [docs/screenshots/HOW-TO-ADD-MEDIA.md](docs/screenshots/HOW-TO-ADD-MEDIA.md) for how to capture and add screenshots + a demo video._
+
 ## Features
 
 - **Play as your own avatar** — create a character on a live 3D picker (female/male,
