@@ -13,22 +13,9 @@ generator. Inspired by the "design under pressure, then get rated" loop.
 
 ▶️ **Play locally:** see [Run locally](#run-locally) · **Deploy your own:** see [DEPLOY.md](DEPLOY.md)
 
-<!-- DEMO VIDEO — to embed a gameplay clip:
-     1. Record a short screen capture while playing (Windows: Win+G Game Bar; Mac: Cmd+Shift+5). ~30–60s, under 100 MB.
-     2. Open a new Issue on this repo and DRAG the video into the comment box — GitHub uploads it and gives a
-        URL like https://github.com/user-attachments/assets/xxxx . (You don't have to submit the issue.)
-     3. Paste that URL on its own line below — GitHub renders it as a video player. Then delete these comments. -->
-<!-- https://github.com/user-attachments/assets/PASTE-VIDEO-URL-HERE -->
-
-### Screenshots
-
-<!-- Put PNGs in docs/screenshots/ (suggested names below), then uncomment this table:
-| Create your character | Designing (first person) | Exploring the neighborhood |
-|---|---|---|
-| ![picker](docs/screenshots/picker.png) | ![design](docs/screenshots/design.png) | ![explore](docs/screenshots/explore.png) |
--->
-
-_No media yet — see [docs/screenshots/HOW-TO-ADD-MEDIA.md](docs/screenshots/HOW-TO-ADD-MEDIA.md) for how to capture and add screenshots + a demo video._
+<!-- Paste the gameplay video's GitHub URL on the line right below this comment, then delete
+     the comment. (Get the URL by dragging the video into a new GitHub Issue's comment box —
+     GitHub uploads it and gives a https://github.com/user-attachments/assets/... link.) -->
 
 ## Features
 
